@@ -1,1170 +1,986 @@
-#include "pch.h"	
+#include "pch.h"
 #include "SpeedFlipTrainer.h"
-#include "RenderMeter.h"
-#include <array>
-#include "BotAttempt.h"
-#include "bakkesmod/wrappers/wrapperstructs.h" // Ensure this includes the definition of Matrix
+#include "RenderMeter.h" // Ensure this is after SpeedFlipTrainer.h if it uses its types
+// #include <array> // Already in pch.h or SpeedFlipTrainer.h if needed by BotAttempt/Attempt
+// #include "BotAttempt.h" // Already in SpeedFlipTrainer.h
+// #include "bakkesmod/wrappers/wrapperstructs.h" // Already in SpeedFlipTrainer.h
 
+#ifndef M_PI // Should be in SpeedFlipTrainer.h
+#define M_PI 3.14159265358979323846
+#endif
+#define CONST_PI_F (static_cast<float>(M_PI)) // For clarity if used
 
-#define _USE_MATH_DEFINES
-#include <math.h>
-
-BAKKESMOD_PLUGIN(SpeedFlipTrainer, "Speedflip trainer", plugin_version, PLUGINTYPE_CUSTOM_TRAINING)
+BAKKESMOD_PLUGIN(SpeedFlipTrainer, "Speedflip Trainer", plugin_version, PLUGINTYPE_CUSTOM_TRAINING)
 
 std::shared_ptr<CVarManagerWrapper> _globalCvarManager;
 
+
+// Helper struct for clock time, can be local to where it's used or in the header if widely needed.
 struct clock_time {
-	int hour_hand;
-	int min_hand;
+    int hour_hand;
+    int min_hand;
 };
 
-// SpeedFlipTrainer.cpp - Implémentation de la fonction
-/*void SpeedFlipTrainer::RenderCarAxes(CanvasWrapper canvas)
-{
-	if (!*enabled || !loaded || !*showCarAxes || !gameWrapper->IsInCustomTraining())
-		return;
+// --- SpeedFlipTrainer Member Function Implementations ---
 
-	CarWrapper car = gameWrapper->GetLocalCar();
-	if (car.IsNull())
-		return;
-
-	// Récupérer la position et la rotation de la voiture
-	Vector carLocation = car.GetLocation();
-	Rotator carRotation = car.GetRotation();
-
-	// Convertir la rotation en vecteurs directionnels
-	auto orientation = RotatorToMatrix(carRotation);
-	Vector forward = orientation.forward;
-	Vector right = orientation.right;
-	Vector up = orientation.up;
-
-	// Couleurs pour les axes principaux (RGB)
-	LinearColor redColor = { 1.0f, 0.0f, 0.0f, 1.0f };    // Rouge pour l'axe X (droite)
-	LinearColor greenColor = { 0.0f, 1.0f, 0.0f, 1.0f };  // Vert pour l'axe Y (avant)
-	LinearColor blueColor = { 0.0f, 0.0f, 1.0f, 1.0f };   // Bleu pour l'axe Z (haut)
-
-	// Couleurs pour les marqueurs diagonaux
-	LinearColor orangeColor = { 1.0f, 0.5f, 0.0f, 1.0f }; // Orange pour avant-gauche/arrière-droit
-	LinearColor purpleColor = { 0.5f, 0.0f, 1.0f, 1.0f }; // Violet pour avant-droit/arrière-gauche
-	LinearColor cyanColor = { 0.0f, 1.0f, 1.0f, 1.0f };   // Cyan pour haut-avant
-	LinearColor yellowColor = { 1.0f, 1.0f, 0.0f, 1.0f }; // Jaune pour haut-arrière
-
-	// Dessiner les axes principaux (X, Y, Z)
-	// Axe X (droite) - Rouge
-	canvas.DrawLine3D(carLocation, carLocation + (right * axisLength), redColor);
-
-	// Axe Y (avant) - Vert
-	canvas.DrawLine3D(carLocation, carLocation + (forward * axisLength), greenColor);
-
-	// Axe Z (haut) - Bleu
-	canvas.DrawLine3D(carLocation, carLocation + (up * axisLength), blueColor);
-
-	// Point d'origine
-	canvas.Draw3DBox(carLocation, Vector{ 5, 5, 5 }, LinearColor{ 1, 1, 1, 1 });
-
-	// Point sur les axes (pour mieux visualiser la direction)
-	canvas.Draw3DBox(carLocation + (right * axisLength), Vector{ 5, 5, 5 }, redColor);
-	canvas.Draw3DBox(carLocation + (forward * axisLength), Vector{ 5, 5, 5 }, greenColor);
-	canvas.Draw3DBox(carLocation + (up * axisLength), Vector{ 5, 5, 5 }, blueColor);
-
-	// Dessiner les marqueurs diagonaux
-	float diagonalLength = axisLength * 0.7f;
-
-	// Avant-gauche/arrière-droit (orange)
-	Vector frontLeft = forward - right;
-	frontLeft.normalize();
-	Vector backRight = -frontLeft;
-	canvas.DrawLine3D(carLocation, carLocation + (frontLeft * diagonalLength), orangeColor);
-	canvas.DrawLine3D(carLocation, carLocation + (backRight * diagonalLength), orangeColor);
-	canvas.Draw3DBox(carLocation + (frontLeft * diagonalLength), Vector{ 5, 5, 5 }, orangeColor);
-	canvas.Draw3DBox(carLocation + (backRight * diagonalLength), Vector{ 5, 5, 5 }, orangeColor);
-
-	// Avant-droit/arrière-gauche (violet)
-	Vector frontRight = forward + right;
-	frontRight.normalize();
-	Vector backLeft = -frontRight;
-	canvas.DrawLine3D(carLocation, carLocation + (frontRight * diagonalLength), purpleColor);
-	canvas.DrawLine3D(carLocation, carLocation + (backLeft * diagonalLength), purpleColor);
-	canvas.Draw3DBox(carLocation + (frontRight * diagonalLength), Vector{ 5, 5, 5 }, purpleColor);
-	canvas.Draw3DBox(carLocation + (backLeft * diagonalLength), Vector{ 5, 5, 5 }, purpleColor);
-
-	// Haut-avant/bas-arrière (cyan)
-	Vector topFront = up + forward;
-	topFront.normalize();
-	Vector bottomBack = -topFront;
-	canvas.DrawLine3D(carLocation, carLocation + (topFront * diagonalLength), cyanColor);
-	canvas.DrawLine3D(carLocation, carLocation + (bottomBack * diagonalLength), cyanColor);
-	canvas.Draw3DBox(carLocation + (topFront * diagonalLength), Vector{ 5, 5, 5 }, cyanColor);
-	canvas.Draw3DBox(carLocation + (bottomBack * diagonalLength), Vector{ 5, 5, 5 }, cyanColor);
-
-	// Haut-arrière/bas-avant (jaune)
-	Vector topBack = up - forward;
-	topBack.normalize();
-	Vector bottomFront = -topBack;
-	canvas.DrawLine3D(carLocation, carLocation + (topBack * diagonalLength), yellowColor);
-	canvas.DrawLine3D(carLocation, carLocation + (bottomFront * diagonalLength), yellowColor);
-	canvas.Draw3DBox(carLocation + (topBack * diagonalLength), Vector{ 5, 5, 5 }, yellowColor);
-	canvas.Draw3DBox(carLocation + (bottomFront * diagonalLength), Vector{ 5, 5, 5 }, yellowColor);
-
-	// Couleurs des côtés de la voiture
-	LinearColor leftSideColor = { 0.0f, 0.7f, 1.0f, 0.5f };  // Bleu clair pour côté gauche
-	LinearColor rightSideColor = { 1.0f, 0.7f, 0.0f, 0.5f }; // Orange clair pour côté droit
-
-	// Dessiner des marqueurs sur les côtés de la voiture
-	float carWidth = 40.0f; // Approximation de la largeur de la voiture
-	float carHeight = 20.0f; // Approximation de la hauteur de la voiture
-
-	// Côté gauche (bleu clair)
-	Vector leftSide = carLocation - (right * carWidth / 2) + (up * carHeight / 2);
-	canvas.Draw3DBox(leftSide, Vector{ 5, 30, 20 }, leftSideColor);
-
-	// Côté droit (orange clair)
-	Vector rightSide = carLocation + (right * carWidth / 2) + (up * carHeight / 2);
-	canvas.Draw3DBox(rightSide, Vector{ 5, 30, 20 }, rightSideColor);
-}*/
-
-// Fonction d'aide pour convertir une Rotator en vecteurs directionnels
-struct Orientation {
-	Vector forward;
-	Vector right;
-	Vector up;
-};
-
-// SpeedFlipTrainer.cpp - Ajoutez ces fonctions NEWVER
-
-// Fonction utilitaire pour convertir Rotator en vecteurs d'orientation
-SpeedFlipTrainer::Orientation SpeedFlipTrainer::RotatorToMatrix(const Rotator& rotation) {
-	Orientation result;
-
-	// Conversion de rotations en radians
-	float pitch = rotation.Pitch * M_PI / 32768.0f;
-	float yaw = rotation.Yaw * M_PI / 32768.0f;
-	float roll = rotation.Roll * M_PI / 32768.0f;
-
-	// Calcul des sinus et cosinus
-	float sp = sinf(pitch);
-	float cp = cosf(pitch);
-	float sy = sinf(yaw);
-	float cy = cosf(yaw);
-	float sr = sinf(roll);
-	float cr = cosf(roll);
-
-	// Calcul des vecteurs directionnels
-	// Forward vector (avant)
-	result.forward.X = cp * cy;
-	result.forward.Y = cp * sy;
-	result.forward.Z = sp;
-
-	// Right vector (droite)
-	result.right.X = cy * sr * sp + cr * sy;
-	result.right.Y = sy * sr * sp - cr * cy;
-	result.right.Z = -cp * sr;
-
-	// Up vector (haut)
-	result.up.X = -cr * sp * cy + sr * sy;
-	result.up.Y = -cr * sp * sy - sr * cy;
-	result.up.Z = cp * cr;
-
-	return result;
+SpeedFlipTrainer::SpeedFlipTrainer() {
+    // Initialize shared_ptr members for CVars
+    showCarAxes = std::make_shared<bool>(true);
+    axisLength = std::make_shared<float>(150.0f);
+    enabled = std::make_shared<bool>(true);
+    showAngleMeter = std::make_shared<bool>(true);
+    showPositionMeter = std::make_shared<bool>(true);
+    showFlipMeter = std::make_shared<bool>(true);
+    showJumpMeter = std::make_shared<bool>(true);
+    changeSpeed = std::make_shared<bool>(false);
+    speed = std::make_shared<float>(1.0f);
+    rememberSpeed = std::make_shared<bool>(true);
+    numHitsChangedSpeed = std::make_shared<int>(3);
+    speedIncrement = std::make_shared<float>(0.05f);
+    optimalLeftAngle = std::make_shared<int>(-30);
+    optimalRightAngle = std::make_shared<int>(30);
+    flipCancelThreshold = std::make_shared<int>(13); // Original: 10, error list implies 13 for some tests
+    jumpLow = std::make_shared<int>(40);
+    jumpHigh = std::make_shared<int>(90);
+    saveToFile = std::make_shared<bool>(false);
 }
 
-// Définition d'une structure Vector4 pour les calculs de projection
-struct Vector4 {
-	float X, Y, Z, W;
 
-	Vector4() : X(0), Y(0), Z(0), W(1.0f) {}
-	Vector4(float x, float y, float z, float w) : X(x), Y(y), Z(z), W(w) {}
-	Vector4(const Vector& v) : X(v.X), Y(v.Y), Z(v.Z), W(1.0f) {}
-};
+SpeedFlipTrainer::Orientation SpeedFlipTrainer::RotatorToOrientation(const Rotator& rotation) {
+    Orientation result;
+
+    float pitch = rotation.Pitch * CONST_PI_F / 32768.0f;
+    float yaw = rotation.Yaw * CONST_PI_F / 32768.0f;
+    float roll = rotation.Roll * CONST_PI_F / 32768.0f;
+
+    float sp = sinf(pitch);
+    float cp = cosf(pitch);
+    float sy = sinf(yaw);
+    float cy = cosf(yaw);
+    float sr = sinf(roll);
+    float cr = cosf(roll);
+
+    result.forward.X = cp * cy;
+    result.forward.Y = cp * sy;
+    result.forward.Z = sp;
+
+    result.right.X = cy * sr * sp + cr * sy;
+    result.right.Y = sy * sr * sp - cr * cy;
+    result.right.Z = -cp * sr;
+
+    result.up.X = -cr * sp * cy + sr * sy;
+    result.up.Y = -cr * sp * sy - sr * cy;
+    result.up.Z = cp * cr;
+
+    return result;
+}
 
 
-// Fonction pour obtenir la matrice de projection de la caméra
 Matrix SpeedFlipTrainer::GetViewProjectionMatrix(CameraWrapper camera) {
-	Matrix result = {};
+    if (camera.IsNull()) return Matrix(); // Return identity or zero matrix
 
-	// Obtenir la position et la rotation de la caméra
-	Vector camLocation = camera.GetLocation();
-	Rotator camRotation = camera.GetRotation();
-	float FOV = camera.GetFOV();
+    Vector camLocation = camera.GetLocation();
+    Rotator camRotation = camera.GetRotation();
+    float FOV = camera.GetFOV();
+    Vector2 screenSize = gameWrapper->GetScreenSize(); // Or pass canvas.GetSize()
+    float aspect = (screenSize.Y > 0) ? screenSize.X / screenSize.Y : 16.0f / 9.0f;
 
-	// Conversion de la rotation en vecteurs de base
-	Orientation camOrientation = this->RotatorToMatrix(camRotation);
-	Vector forward = camOrientation.forward;
-	Vector right = camOrientation.right;
-	Vector up = camOrientation.up;
 
-	// Calculer la matrice de vue
-	// La matrice de vue transforme les coordonnées du monde en coordonnées relatives à la caméra
-	Matrix viewMatrix = {};
+    Orientation camOrientation = RotatorToOrientation(camRotation);
+    Vector f = camOrientation.forward;
+    Vector r = camOrientation.right;
+    Vector u = camOrientation.up;
 
-	// Première rangée (axe X de la caméra)
-	viewMatrix.M[0][0] = right.X;
-	viewMatrix.M[0][1] = right.Y;
-	viewMatrix.M[0][2] = right.Z;
-	viewMatrix.M[0][3] = -Vector::dot(right, camLocation);
+    Matrix viewMatrix;
+    viewMatrix.M[0][0] = r.X; viewMatrix.M[0][1] = r.Y; viewMatrix.M[0][2] = r.Z; viewMatrix.M[0][3] = -Vector::dot(r, camLocation);
+    viewMatrix.M[1][0] = u.X; viewMatrix.M[1][1] = u.Y; viewMatrix.M[1][2] = u.Z; viewMatrix.M[1][3] = -Vector::dot(u, camLocation);
+    viewMatrix.M[2][0] = -f.X;viewMatrix.M[2][1] = -f.Y;viewMatrix.M[2][2] = -f.Z;viewMatrix.M[2][3] = Vector::dot(f, camLocation); // Standard view matrix looks along -Z
+    viewMatrix.M[3][0] = 0;   viewMatrix.M[3][1] = 0;   viewMatrix.M[3][2] = 0;   viewMatrix.M[3][3] = 1;
 
-	// Deuxième rangée (axe Y de la caméra)
-	viewMatrix.M[1][0] = up.X;
-	viewMatrix.M[1][1] = up.Y;
-	viewMatrix.M[1][2] = up.Z;
-	viewMatrix.M[1][3] = -Vector::dot(up, camLocation);
 
-	// Troisième rangée (axe Z de la caméra)
-	viewMatrix.M[2][0] = -forward.X; // Inverser l'axe Z pour la convention à droite
-	viewMatrix.M[2][1] = -forward.Y;
-	viewMatrix.M[2][2] = -forward.Z;
-	viewMatrix.M[2][3] = Vector::dot(forward, camLocation);
+    Matrix projMatrix;
+    float nearPlane = 10.0f; // Typical near plane
+    float farPlane = 30000.0f; // Typical far plane for Rocket League
+    float fovRadians = FOV * (CONST_PI_F / 180.0f);
+    float yScale = 1.0f / tanf(fovRadians / 2.0f);
+    float xScale = yScale / aspect;
 
-	// Quatrième rangée (pour les coordonnées homogènes)
-	viewMatrix.M[3][0] = 0.0f;
-	viewMatrix.M[3][1] = 0.0f;
-	viewMatrix.M[3][2] = 0.0f;
-	viewMatrix.M[3][3] = 1.0f;
+    projMatrix.M[0][0] = xScale; projMatrix.M[0][1] = 0;      projMatrix.M[0][2] = 0;                            projMatrix.M[0][3] = 0;
+    projMatrix.M[1][0] = 0;      projMatrix.M[1][1] = yScale; projMatrix.M[1][2] = 0;                            projMatrix.M[1][3] = 0;
+    projMatrix.M[2][0] = 0;      projMatrix.M[2][1] = 0;      projMatrix.M[2][2] = farPlane / (farPlane - nearPlane); projMatrix.M[2][3] = -(farPlane * nearPlane) / (farPlane - nearPlane);
+    projMatrix.M[3][0] = 0;      projMatrix.M[3][1] = 0;      projMatrix.M[3][2] = 1;                            projMatrix.M[3][3] = 0;
 
-	// Calculer la matrice de projection
-	float aspect = 16.0f / 9.0f; // Ratio par défaut si non disponible
-	float nearPlane = 10.0f;
-	float farPlane = 100000.0f;
-	float tanHalfFOV = tanf((FOV * CONST_PI_F / 180.0f) / 2.0f);
-
-	Matrix projMatrix = {};
-	projMatrix.M[0][0] = 1.0f / (aspect * tanHalfFOV);
-	projMatrix.M[1][1] = 1.0f / tanHalfFOV;
-	projMatrix.M[2][2] = farPlane / (farPlane - nearPlane);
-	projMatrix.M[2][3] = 1.0f;
-	projMatrix.M[3][2] = -(farPlane * nearPlane) / (farPlane - nearPlane);
-	projMatrix.M[3][3] = 0.0f;
-
-	// Multiplier les matrices pour obtenir la matrice de projection finale
-	// Note: Cette multiplication simplifiée ne gère pas les cas complexes
-	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 4; j++) {
-			result.M[i][j] = 0;
-			for (int k = 0; k < 4; k++) {
-				result.M[i][j] += viewMatrix.M[i][k] * projMatrix.M[k][j];
-			}
-		}
-	}
-
-	return result;
+    return projMatrix * viewMatrix; // Correct order: projection * view
 }
 
-// Fonction pour convertir un point 3D en 2D pour l'affichage
+
 Vector2 SpeedFlipTrainer::WorldToScreen(CanvasWrapper canvas, Vector location) {
-	auto screenSize = canvas.GetSize();
-	if (auto currentCamera = gameWrapper->GetCamera()) {
-		// Obtenir la matrice de projection à partir de la caméra
-		Matrix viewProjMatrix = GetViewProjectionMatrix(currentCamera);
+    if (!gameWrapper) return Vector2{ 0,0 };
+    CameraWrapper camera = gameWrapper->GetCamera();
+    if (camera.IsNull()) return Vector2{ 0, 0 };
 
-		// Transformer la position 3D en espace de coordonnées homogènes
-		Vector4 locationVec4(location);
-		Vector4 clipSpaceLocation = viewProjMatrix * locationVec4;
+    Vector2 screenSize = canvas.GetSize();
+    if (screenSize.X == 0 || screenSize.Y == 0) return Vector2{ 0,0 };
 
-		// Effectuer la division perspective pour obtenir les coordonnées normalisées
-		if (clipSpaceLocation.W != 0.0f) {
-			clipSpaceLocation.X /= clipSpaceLocation.W;
-			clipSpaceLocation.Y /= clipSpaceLocation.W;
-			clipSpaceLocation.Z /= clipSpaceLocation.W;
-		}
+    Matrix viewProjMatrix = GetViewProjectionMatrix(camera);
+    Vector4 locationVec4(location, 1.0f); // W=1 for positions
+    Vector4 clipSpaceLocation = viewProjMatrix * locationVec4;
 
-		// Convertir les coordonnées normalisées en coordonnées d'écran
-		int screenX = static_cast<int>((clipSpaceLocation.X * 0.5f + 0.5f) * screenSize.X);
-		int screenY = static_cast<int>((-clipSpaceLocation.Y * 0.5f + 0.5f) * screenSize.Y);
+    if (clipSpaceLocation.W == 0.0f || clipSpaceLocation.W < 0.0f) { // Check for W <= 0 (behind camera or at infinity)
+        return Vector2{ -1, -1 }; // Indicate point is not visible or problematic
+    }
 
-		return Vector2{ screenX, screenY };
-	}
-	return Vector2{ 0, 0 }; // Fallback si la caméra n'est pas disponible
+    // Perspective division
+    float ndcX = clipSpaceLocation.X / clipSpaceLocation.W;
+    float ndcY = clipSpaceLocation.Y / clipSpaceLocation.W;
+    // float ndcZ = clipSpaceLocation.Z / clipSpaceLocation.W; // Z is not used for 2D screen coords
+
+    // Convert NDC to screen coordinates
+    // NDC range is [-1, 1]. Screen Y is often inverted in graphics APIs.
+    int screenX = static_cast<int>((ndcX * 0.5f + 0.5f) * screenSize.X);
+    int screenY = static_cast<int>((-ndcY * 0.5f + 0.5f) * screenSize.Y); // Invert Y for top-left origin
+
+    return Vector2{ screenX, screenY };
 }
 
-
-
-// Fonction pour vérifier si un point est visible à l'écran
 bool SpeedFlipTrainer::IsPointOnScreen(const Vector2& point, float screenWidth, float screenHeight) {
-	return point.X >= 0 && point.X <= screenWidth &&
-		point.Y >= 0 && point.Y <= screenHeight;
+    return point.X >= 0 && point.X <= screenWidth &&
+        point.Y >= 0 && point.Y <= screenHeight;
 }
 
-// Fonction pour dessiner une ligne avec une flèche à la fin
-void SpeedFlipTrainer::DrawArrow(CanvasWrapper& canvas, Vector2 start, Vector2 end, const struct Color& color) {
-	// Dessiner la ligne principale
-	canvas.SetColor(color.red, color.green, color.blue, (char)(255 * color.opacity));
-	canvas.DrawLine(start, end, 2);
+void SpeedFlipTrainer::DrawArrow(CanvasWrapper& canvas, Vector2 start, Vector2 end, const CustomColor& color, int thickness) {
+    canvas.SetColor(color.r, color.g, color.b, color.GetAlphaChar());
+    canvas.DrawLine(start, end, thickness);
 
-	// Calculer la direction et la normaliser
-	float dx = end.X - start.X;
-	float dy = end.Y - start.Y;
-	float length = sqrtf(dx * dx + dy * dy);
+    float dx = end.X - start.X;
+    float dy = end.Y - start.Y;
+    float length = sqrtf(dx * dx + dy * dy);
 
-	if (length < 1.0f) return; // Éviter la division par zéro
+    if (length < 1.0f) return;
 
-	dx /= length;
-	dy /= length;
+    dx /= length; // Normalized direction vector
+    dy /= length;
 
-	// Créer les points de la flèche
-	float arrowSize = 10.0f;
-	float arrowAngle = 0.5f; // environ 30 degrés
+    float arrowSize = 10.0f;
+    float arrowAngleDegrees = 30.0f; // Angle of arrowhead lines relative to the main line
+    float arrowAngleRadians = arrowAngleDegrees * CONST_PI_F / 180.0f;
 
-	Vector2 arrow1;
-	arrow1.X = end.X - arrowSize * (dx * cosf(arrowAngle) + dy * sinf(arrowAngle));
-	arrow1.Y = end.Y - arrowSize * (dy * cosf(arrowAngle) - dx * sinf(arrowAngle));
+    // Point 1 of arrowhead
+    // Rotated by +arrowAngleRadians
+    float x1 = end.X - arrowSize * (dx * cosf(arrowAngleRadians) - dy * sinf(arrowAngleRadians));
+    float y1 = end.Y - arrowSize * (dy * cosf(arrowAngleRadians) + dx * sinf(arrowAngleRadians));
+    canvas.DrawLine(end, Vector2{ static_cast<int>(x1), static_cast<int>(y1) }, thickness);
 
-	Vector2 arrow2;
-	arrow2.X = end.X - arrowSize * (dx * cosf(arrowAngle) - dy * sinf(arrowAngle));
-	arrow2.Y = end.Y - arrowSize * (dy * cosf(arrowAngle) + dx * sinf(arrowAngle));
-
-	// Dessiner les lignes de la flèche
-	canvas.DrawLine(end, arrow1, 2);
-	canvas.DrawLine(end, arrow2, 2);
+    // Point 2 of arrowhead
+    // Rotated by -arrowAngleRadians
+    float x2 = end.X - arrowSize * (dx * cosf(-arrowAngleRadians) - dy * sinf(-arrowAngleRadians));
+    float y2 = end.Y - arrowSize * (dy * cosf(-arrowAngleRadians) + dx * sinf(-arrowAngleRadians));
+    canvas.DrawLine(end, Vector2{ static_cast<int>(x2), static_cast<int>(y2) }, thickness);
 }
 
-// Implémentation principale du rendu des axes
 void SpeedFlipTrainer::RenderCarAxes(CanvasWrapper canvas) {
-	if (!*enabled || !loaded || !*showCarAxes || !gameWrapper->IsInCustomTraining())
-		return;
+    if (!gameWrapper || !*enabled || !loaded || !*showCarAxes || !gameWrapper->IsInCustomTraining())
+        return;
 
-	CarWrapper car = gameWrapper->GetLocalCar();
-	if (car.IsNull())
-		return;
+    CarWrapper car = gameWrapper->GetLocalCar();
+    if (car.IsNull()) return;
 
-	// Récupérer la position et la rotation de la voiture
-	Vector carLocation = car.GetLocation();
-	Rotator carRotation = car.GetRotation();
+    Vector carLocation = car.GetLocation();
+    Rotator carRotation = car.GetRotation();
+    Orientation orientation = RotatorToOrientation(carRotation);
 
-	// Convertir la rotation en vecteurs directionnels
-	auto orientation = RotatorToMatrix(carRotation);
-	Vector forward = orientation.forward;
-	Vector right = orientation.right;
-	Vector up = orientation.up;
+    // Define colors using CustomColor
+    CustomColor redColor(255, 0, 0);
+    CustomColor greenColor(0, 255, 0);
+    CustomColor blueColor(0, 0, 255);
+    CustomColor orangeColor(255, 165, 0);
+    CustomColor purpleColor(128, 0, 128);
+    // CustomColor cyanColor(0, 255, 255); // Defined but not used in original logic for DrawArrow
+    // CustomColor yellowColor(255, 255, 0); // Defined but not used
+    CustomColor whiteColor(255, 255, 255);
 
-	// Calculer les points finaux des axes
-	Vector forwardEnd = carLocation + forward * (*axisLength);
-	Vector rightEnd = carLocation + right * (*axisLength);
-	Vector upEnd = carLocation + up * (*axisLength);
+    Vector2 screenSize = canvas.GetSize();
+    Vector2 carPos2D = WorldToScreen(canvas, carLocation);
 
-	// Couleurs pour les axes
-	struct Color redColor = { (char)255, (char)0, (char)0, 1.0f };
-	struct Color greenColor = { (char)0, (char)255, (char)0, 1.0f };
-	struct Color blueColor = { (char)0, (char)0, (char)255, 1.0f };
-	struct Color orangeColor = { (char)255, (char)165, (char)0, 1.0f };
-	struct Color purpleColor = { (char)128, (char)0, (char)128, 1.0f };
-	struct Color cyanColor = { (char)0, (char)255, (char)255, 1.0f };
-	struct Color yellowColor = { (char)255, (char)255, (char)0, 1.0f };
-	struct Color whiteColor = { (char)255, (char)255, (char)255, 1.0f };
+    if (!IsPointOnScreen(carPos2D, screenSize.X, screenSize.Y)) return; // Don't draw if car center is off-screen
 
-	// Taille de l'écran
-	float screenWidth = canvas.GetSize().X;
-	float screenHeight = canvas.GetSize().Y;
+    canvas.SetColor(whiteColor.r, whiteColor.g, whiteColor.b, whiteColor.GetAlphaChar());
+    canvas.SetPosition(carPos2D - Vector2{ 2,2 }); // Center the box
+    canvas.FillBox(Vector2{ 5, 5 });
 
-	// Convertir les positions 3D en positions 2D à l'écran
-	Vector2 carPos2D = WorldToScreen(canvas, carLocation);
-	Vector2 forwardPos2D = WorldToScreen(canvas, forwardEnd);
-	Vector2 rightPos2D = WorldToScreen(canvas, rightEnd);
-	Vector2 upPos2D = WorldToScreen(canvas, upEnd);
+    // End points of axes
+    Vector forwardEnd = carLocation + orientation.forward * (*axisLength);
+    Vector rightEnd = carLocation + orientation.right * (*axisLength);
+    Vector upEnd = carLocation + orientation.up * (*axisLength);
 
-	// Vérifier si tous les points sont visibles sur l'écran
-	bool carVisible = IsPointOnScreen(carPos2D, screenWidth, screenHeight);
-	bool forwardVisible = IsPointOnScreen(forwardPos2D, screenWidth, screenHeight);
-	bool rightVisible = IsPointOnScreen(rightPos2D, screenWidth, screenHeight);
-	bool upVisible = IsPointOnScreen(upPos2D, screenWidth, screenHeight);
+    Vector2 forwardEnd2D = WorldToScreen(canvas, forwardEnd);
+    Vector2 rightEnd2D = WorldToScreen(canvas, rightEnd);
+    Vector2 upEnd2D = WorldToScreen(canvas, upEnd);
 
-	// Dessiner les axes principaux s'ils sont visibles
-	if (carVisible) {
-		// Dessiner un point central à la position de la voiture
-		canvas.SetColor(whiteColor.red, whiteColor.green, whiteColor.blue, (char)(255 * whiteColor.opacity));
-		canvas.SetPosition(carPos2D);
-		canvas.FillBox(Vector2{ 5, 5 });
+    if (IsPointOnScreen(forwardEnd2D, screenSize.X, screenSize.Y)) DrawArrow(canvas, carPos2D, forwardEnd2D, greenColor);
+    if (IsPointOnScreen(rightEnd2D, screenSize.X, screenSize.Y)) DrawArrow(canvas, carPos2D, rightEnd2D, redColor);
+    if (IsPointOnScreen(upEnd2D, screenSize.X, screenSize.Y)) DrawArrow(canvas, carPos2D, upEnd2D, blueColor);
 
-		// Dessiner l'axe avant (Y) - Vert
-		if (forwardVisible) {
-			DrawArrow(canvas, carPos2D, forwardPos2D, greenColor);
-		}
+    // Diagonal Axes
+    float diagonalLength = (*axisLength) * 0.6f;
+    Vector frontLeftDir = (orientation.forward - orientation.right).normalize();
+    Vector frontRightDir = (orientation.forward + orientation.right).normalize();
 
-		// Dessiner l'axe droit (X) - Rouge
-		if (rightVisible) {
-			DrawArrow(canvas, carPos2D, rightPos2D, redColor);
-		}
+    Vector2 frontLeftEnd2D = WorldToScreen(canvas, carLocation + frontLeftDir * diagonalLength);
+    Vector2 frontRightEnd2D = WorldToScreen(canvas, carLocation + frontRightDir * diagonalLength);
 
-		// Dessiner l'axe haut (Z) - Bleu
-		if (upVisible) {
-			DrawArrow(canvas, carPos2D, upPos2D, blueColor);
-		}
+    if (IsPointOnScreen(frontLeftEnd2D, screenSize.X, screenSize.Y)) DrawArrow(canvas, carPos2D, frontLeftEnd2D, orangeColor);
+    if (IsPointOnScreen(frontRightEnd2D, screenSize.X, screenSize.Y)) DrawArrow(canvas, carPos2D, frontRightEnd2D, purpleColor);
 
-		// Dessiner les axes diagonaux
-		float diagonalLength = (*axisLength) * 0.6f;
-
-		// Avant-gauche/arrière-droit (orange)
-		Vector frontLeft = forward - right;
-		frontLeft.normalize();
-		Vector frontLeftEnd = carLocation + frontLeft * diagonalLength;
-		Vector2 frontLeftPos2D = WorldToScreen(canvas, frontLeftEnd);
-
-		if (IsPointOnScreen(frontLeftPos2D, screenWidth, screenHeight)) {
-			DrawArrow(canvas, carPos2D, frontLeftPos2D, orangeColor);
-		}
-
-		// Avant-droit/arrière-gauche (violet)
-		Vector frontRight = forward + right;
-		frontRight.normalize();
-		Vector frontRightEnd = carLocation + frontRight * diagonalLength;
-		Vector2 frontRightPos2D = WorldToScreen(canvas, frontRightEnd);
-
-		if (IsPointOnScreen(frontRightPos2D, screenWidth, screenHeight)) {
-			DrawArrow(canvas, carPos2D, frontRightPos2D, purpleColor);
-		}
-
-		// Marqueurs des côtés gauche/droit
-		Vector leftSide = carLocation - right * 40.0f;
-		Vector rightSide = carLocation + right * 40.0f;
-		Vector2 leftSidePos2D = WorldToScreen(canvas, leftSide);
-		Vector2 rightSidePos2D = WorldToScreen(canvas, rightSide);
-
-		// Côté gauche (cyan)
-		if (IsPointOnScreen(leftSidePos2D, screenWidth, screenHeight)) {
-			canvas.SetColor(cyanColor.red, cyanColor.green, cyanColor.blue, (char)(255 * 0.7f));
-			canvas.SetPosition(leftSidePos2D);
-			canvas.FillBox(Vector2{ 10, 10 });
-		}
-
-		// Côté droit (jaune)
-		if (IsPointOnScreen(rightSidePos2D, screenWidth, screenHeight)) {
-			canvas.SetColor(yellowColor.red, yellowColor.green, yellowColor.blue, (char)(255 * 0.7f));
-			canvas.SetPosition(rightSidePos2D);
-			canvas.FillBox(Vector2{ 10, 10 });
-		}
-	}
-
-	// Ajouter des informations textuelles pour aider à l'orientation
-	canvas.SetColor(255, 255, 255, 255);
-	canvas.SetPosition(Vector2{ 10, static_cast<int>(screenHeight - 60) });
-	canvas.DrawString("Rouge (X): Droite | Vert (Y): Avant | Bleu (Z): Haut", 1.0f, 1.0f);
-	canvas.SetPosition(Vector2{ 10, static_cast<int>(screenHeight - 40) });
-	canvas.DrawString("Orange: Avant-Gauche | Violet: Avant-Droit", 1.0f, 1.0f);
-	canvas.SetPosition(Vector2{ 10, static_cast<int>(screenHeight - 20) });
-	canvas.DrawString("Cyan: Côté Gauche | Jaune: Côté Droit", 1.0f, 1.0f);
-}
-
-// Modifier la fonction RenderMeters pour appeler la nouvelle fonction
-void SpeedFlipTrainer::RenderMeters(CanvasWrapper canvas)
-{
-	bool training = gameWrapper->IsInCustomTraining();
-
-	if (!*enabled || !loaded || !training) return;
-
-	float SCREENWIDTH = canvas.GetSize().X;
-	float SCREENHEIGHT = canvas.GetSize().Y;
-
-	if (*showAngleMeter)
-		RenderAngleMeter(canvas, SCREENWIDTH, SCREENHEIGHT);
-
-	if (*showPositionMeter)
-		RenderPositionMeter(canvas, SCREENWIDTH, SCREENHEIGHT);
-
-	if (*showFlipMeter)
-		RenderFlipCancelMeter(canvas, SCREENWIDTH, SCREENHEIGHT);
-
-	if (*showJumpMeter)
-		RenderFirstJumpMeter(canvas, SCREENWIDTH, SCREENHEIGHT);
-
-	// Ajout de l'appel à la fonction de rendu des axes
-	if (*showCarAxes)
-		RenderCarAxes(canvas);
+    // Textual info
+    canvas.SetColor(whiteColor.r, whiteColor.g, whiteColor.b, whiteColor.GetAlphaChar());
+    int textY = screenSize.Y - 60;
+    canvas.SetPosition(Vector2{ 10, textY });
+    canvas.DrawString("Rouge (X): Droite | Vert (Y): Avant | Bleu (Z): Haut");
+    textY += 20;
+    canvas.SetPosition(Vector2{ 10, textY });
+    canvas.DrawString("Orange: Avant-Gauche | Violet: Avant-Droit");
 }
 
 
-int ComputeDodgeAngle(DodgeComponentWrapper dodge)
-{
-	if (dodge.IsNull())
-		return 0;
+void SpeedFlipTrainer::RenderMeters(CanvasWrapper canvas) {
+    if (!gameWrapper || !*enabled || !loaded || !gameWrapper->IsInCustomTraining()) return;
 
-	Vector dd = dodge.GetDodgeDirection();
-	if (dd.X == 0 && dd.Y == 0)
-		return 0;
+    Vector2 screenSize = canvas.GetSize(); // Get once
 
-	//LOG("X: {0} Y: {1}", dd.X, dd.Y);
-	return (int)(atan2f(dd.Y, dd.X) * (180 / M_PI));
+    if (*showAngleMeter) RenderAngleMeter(canvas, screenSize.X, screenSize.Y);
+    if (*showPositionMeter) RenderPositionMeter(canvas, screenSize.X, screenSize.Y);
+    if (*showFlipMeter) RenderFlipCancelMeter(canvas, screenSize.X, screenSize.Y);
+    if (*showJumpMeter) RenderFirstJumpMeter(canvas, screenSize.X, screenSize.Y);
+    if (*showCarAxes) RenderCarAxes(canvas); // Called from here
 }
 
-clock_time ComputeClockTime(int angle)
-{
-	if (angle < 0)
-	{
-		angle = 360 + angle;
-	}
-	clock_time time;
-
-	time.hour_hand = (int)(angle * (12.0 / 360.0));
-	time.min_hand = (angle % (360 / 12)) * (60 / 30);
-
-	return time;
+int ComputeDodgeAngle(DodgeComponentWrapper dodge) {
+    if (dodge.IsNull()) return 0;
+    Vector dd = dodge.GetDodgeDirection();
+    if (dd.X == 0 && dd.Y == 0) return 0;
+    return static_cast<int>(atan2f(dd.Y, dd.X) * (180.0f / CONST_PI_F));
 }
 
-float distance(Vector a, Vector b)
-{
-	// Calculating distance
-	return sqrt(pow(a.X - b.X, 2) +
-		pow(a.Y - b.Y, 2));
+clock_time ComputeClockTime(int angle) {
+    if (angle < 0) angle += 360;
+    clock_time time;
+    time.hour_hand = static_cast<int>(angle * (12.0 / 360.0));
+    if (time.hour_hand == 0) time.hour_hand = 12; // 0 should be 12 o'clock
+    time.min_hand = (angle % (360 / 12)) * (60 / (360 / 12)); // Correct calculation for minutes on a clock face segment
+    return time;
 }
 
-void SpeedFlipTrainer::Measure(CarWrapper car, std::shared_ptr<GameWrapper> gameWrapper)
-{
-	int currentPhysicsFrame = gameWrapper->GetEngine().GetPhysicsFrame();
-	int currentTick = currentPhysicsFrame - startingPhysicsFrame;
-
-	ControllerInput input = car.GetInput();
-	attempt.Record(currentTick, input);
-
-	auto loc = car.GetLocation();
-	attempt.traveledY += abs(loc.Y - attempt.positionY);
-	attempt.positionY = loc.Y;
-
-	if (!attempt.jumped && car.GetbJumped())
-	{
-		attempt.jumped = true;
-		attempt.jumpTick = currentTick;
-		LOG("First jump: " + to_string(currentTick) + " ticks");
-	}
-
-	if (!attempt.dodged && car.IsDodging())
-	{
-		attempt.dodged = true;
-		attempt.dodgedTick = currentTick;
-		auto dodge = car.GetDodgeComponent();
-		if (!dodge.IsNull())
-		{
-			attempt.dodgeAngle = ComputeDodgeAngle(dodge);
-			clock_time time = ComputeClockTime(attempt.dodgeAngle);
-			string msg = fmt::format("Dodge Angle: {0:#03d} deg or {1:#02d}:{2:#02d} PM", attempt.dodgeAngle, time.hour_hand, time.min_hand);
-			LOG(msg);
-		}
-	}
-
-	if (input.Throttle != 1)
-		attempt.ticksNotPressingThrottle++;
-	if (input.ActivateBoost != 1)
-		attempt.ticksNotPressingBoost++;
-
-	if (!attempt.flipCanceled  && attempt.dodged && input.Pitch > 0.8)
-	{
-		attempt.flipCanceled = true;
-		attempt.flipCancelTick = currentTick;
-		LOG("Flip Cancel: " + to_string(attempt.flipCancelTick - attempt.dodgedTick) + " ticks");
-	}
+float distance(Vector a, Vector b) {
+    return sqrt(pow(a.X - b.X, 2) + pow(a.Y - b.Y, 2) + pow(a.Z - b.Z, 2)); // Added Z component
 }
 
-void SpeedFlipTrainer::Hook()
-{
-	if (loaded)
-		return;
-	loaded = true;
+void SpeedFlipTrainer::Measure(CarWrapper car, PriWrapper pri) { // Assuming PriWrapper holds input
+    if (!gameWrapper || car.IsNull() || pri.IsNull()) return;
 
-	LOG("Hooking");
-	gameWrapper->RegisterDrawable(bind(&SpeedFlipTrainer::RenderMeters, this, std::placeholders::_1));
+    int currentPhysicsFrame = gameWrapper->GetEngine().GetPhysicsFrame();
+    int currentTick = currentPhysicsFrame - startingPhysicsFrame;
+    if (currentTick < 0) return; // Not started yet
 
-	if (*rememberSpeed)
-		_globalCvarManager->getCvar("sv_soccar_gamespeed").setValue(*speed);
+    ControllerInput input = car.GetInput(); // Or pri.GetInput() if that's where live input is
+    attempt.Record(currentTick, input);
 
-	gameWrapper->HookEventWithCaller<CarWrapper>("Function TAGame.Car_TA.SetVehicleInput",
-		[this](CarWrapper car, void* params, std::string eventname) {
-		if (!*enabled || !loaded || !gameWrapper->IsInCustomTraining())
-			return;
+    Vector loc = car.GetLocation();
+    // attempt.traveledY += abs(loc.Y - attempt.positionY); // This logic is for 2D top-down, might need re-evaluation for 3D path
+    // For now, let's track displacement along the car's initial forward vector or just total distance from start
+    if (attempt.pathPoints.empty()) {
+        attempt.pathPoints.push_back(loc);
+        attempt.totalDistanceTraveled = 0;
+    }
+    else {
+        attempt.totalDistanceTraveled += distance(attempt.pathPoints.back(), loc);
+        attempt.pathPoints.push_back(loc);
+    }
+    attempt.currentPosition = loc; // Store current full position
 
-		if (car.IsNull())
-			return;
+    if (!attempt.jumped && car.GetbJumped()) {
+        attempt.jumped = true;
+        attempt.jumpTick = currentTick;
+        LOG("First jump: {} ticks", currentTick);
+    }
 
-		if (*rememberSpeed)
-			*(this->speed) = _globalCvarManager->getCvar("sv_soccar_gamespeed").getFloatValue();
+    DodgeComponentWrapper dodge = car.GetDodgeComponent();
+    if (!attempt.dodged && !dodge.IsNull() && dodge.GetDodgeTorque().X != 0) { // Check if dodge is active
+        attempt.dodged = true;
+        attempt.dodgedTick = currentTick;
+        attempt.dodgeAngle = ComputeDodgeAngle(dodge);
+        clock_time time = ComputeClockTime(attempt.dodgeAngle);
+        LOG("Dodge Angle: {:03d} deg or {:02d}:{:02d}", attempt.dodgeAngle, time.hour_hand, time.min_hand);
+    }
 
-		auto input = (ControllerInput*)params;
+    if (input.Throttle < 0.9f) attempt.ticksNotPressingThrottle++; // Use a threshold for analog input
+    if (!input.ActivateBoost) attempt.ticksNotPressingBoost++;
 
-		if(mode == SpeedFlipTrainerMode::Bot)
-			PlayBot(gameWrapper, input);
-		else if (mode == SpeedFlipTrainerMode::Replay)
-			PlayAttempt(&replayAttempt, gameWrapper, input);
-
-		// Has time started counting down?
-		float timeLeft = gameWrapper->GetCurrentGameState().GetGameTimeRemaining();
-		int currentFrame = gameWrapper->GetEngine().GetPhysicsFrame();
-		if (initialTime <= 0 || timeLeft == initialTime) // if we have no time OR countdown hasn't started just return
-			return;
-		if (startingPhysicsFrame < 0 && timeLeft < initialTime) // if this is the first frame the countdown has begun
-		{
-			startingPhysicsFrame = currentFrame;
-
-			attempt = Attempt();
-
-			if (!car.IsOnGround())
-				attempt.startedInAir = true;
-
-			if (!input->ActivateBoost)
-				attempt.startedNoBoost = true;
-		}
-
-		// ball hasn't exploded or been hit yet
-		if (!attempt.exploded && !attempt.hit)
-		{
-			Measure(car, gameWrapper);
-		}
-	});
-
-	gameWrapper->HookEvent("Function TAGame.Ball_TA.RecordCarHit",
-		[this](std::string eventname) {
-		if (!*enabled || !loaded || !gameWrapper->IsInCustomTraining() || attempt.hit || attempt.exploded)
-			return;
-
-		attempt.ticksToBall = gameWrapper->GetLocalCar().GetLastBallImpactFrame() - startingPhysicsFrame;
-		attempt.timeToBall = initialTime - gameWrapper->GetCurrentGameState().GetGameTimeRemaining();
-		attempt.hit = true;
-		LOG("Time to ball: {0:.3f}s after {1} tick", attempt.timeToBall, attempt.ticksToBall);
-	});
-
-	gameWrapper->HookEvent("Function TAGame.Ball_TA.Explode", 
-		[this](std::string eventName) {
-		if (!*enabled || !loaded || !gameWrapper->IsInCustomTraining())
-			return;
-
-		auto ball = gameWrapper->GetGameEventAsServer().GetBall();
-		auto car = gameWrapper->GetGameEventAsServer().GetLocalPrimaryPlayer();
-
-		auto distanceToBall = distance(ball.GetLocation(), car.GetLocation());
-		auto meters = (distanceToBall / 100.0) - 4.8; // account for car distance
-		LOG("Distance to ball = {0:.1f}m", meters);
-
-		attempt.exploded = true;
-		attempt.hit = false;
-	});
-
-	gameWrapper->HookEventPost("Function Engine.Controller.Restart", 
-		[this](std::string eventName) {
-		if (!*enabled || !loaded || !gameWrapper->IsInCustomTraining())
-			return;
-
-		//gameWrapper->GetCurrentGameState().SetGameTimeRemaining(2.14);
-		initialTime = gameWrapper->GetCurrentGameState().GetGameTimeRemaining();
-		ticksBeforeTimeExpired = initialTime * 120;
-		startingPhysicsFrame = -1;
-
-		if (attempt.hit && !attempt.exploded)
-		{
-			consecutiveHits++;
-			consecutiveMiss = 0;
-		}
-		else
-		{
-			consecutiveHits = 0;
-			consecutiveMiss++;
-		}
-
-		if (*saveToFile && attempt.inputs.size() > 0)
-		{
-			auto path = attempt.GetFilename(dataDir);
-			attempt.WriteInputsToFile(path);
-			LOG("Saving attempt to: {0}", path.string());
-		}
-
-		auto speedCvar = _globalCvarManager->getCvar("sv_soccar_gamespeed");
-		float speed = speedCvar.getFloatValue();
-
-		if (*changeSpeed)
-		{
-			if (consecutiveHits != 0 && consecutiveHits % (*numHitsChangedSpeed) == 0)
-			{
-				gameWrapper->LogToChatbox(to_string(consecutiveHits) + " " + (consecutiveHits > 1 ? "hits" : "hit") + " in a row");
-				speed += *speedIncrement;
-				speedCvar.setValue(speed);
-				string msg = fmt::format("Game speed + {0:.3f} = {1:.3f}", *speedIncrement, speed);
-				gameWrapper->LogToChatbox(msg);
-			}
-			else if (consecutiveMiss != 0 && consecutiveMiss % (*numHitsChangedSpeed) == 0)
-			{
-				gameWrapper->LogToChatbox(to_string(consecutiveMiss) + " " + (consecutiveMiss > 1 ? "misses" : "miss") + " in a row");
-				speed -= *speedIncrement;
-				if (speed <= 0)
-					speed = 0;
-				speedCvar.setValue(speed);
-				string msg = fmt::format("Game speed - {0:.3f} = {1:.3f}", *speedIncrement, speed);
-				gameWrapper->LogToChatbox(msg);
-			}
-		}
-	});
+    if (attempt.dodged && !attempt.flipCanceled && input.Pitch > 0.8f) { // Still using Pitch for cancel
+        attempt.flipCanceled = true;
+        attempt.flipCancelTick = currentTick;
+        LOG("Flip Cancel: {} ticks after dodge", attempt.flipCancelTick - attempt.dodgedTick);
+    }
 }
 
-void SpeedFlipTrainer::onLoad()
-{
-	_globalCvarManager = cvarManager;
 
-	// DEBUT 
-	cvarManager->registerCvar("sf_show_axes", "1", "Show car orientation axes.", true, false, 0, false, 0, true).bindTo(showCarAxes);
-	cvarManager->registerCvar("sf_axis_length", "150.0", "Length of car orientation axes.", true, true, 50.0f, true, 300.0f, true).bindTo(axisLength);
-	// FIN
+void SpeedFlipTrainer::Hook() {
+    if (loaded) return;
+    loaded = true;
+    LOG("Hooking events");
+    gameWrapper->RegisterDrawable(std::bind(&SpeedFlipTrainer::RenderMeters, this, std::placeholders::_1));
 
-	cvarManager->registerCvar("sf_enabled", "1", "Enabled speedflip training.", true, false, 0, false, 0, true).bindTo(enabled);
-	cvarManager->getCvar("sf_enabled").addOnValueChanged([this](string oldVal, CVarWrapper cvar)
-	{
-		LOG("sf_enabled = {0}", *enabled);
-		if (!*enabled)
-		{
-			onUnload();
-		}
-	});
+    if (*rememberSpeed) {
+        CVarWrapper speedCvar = _globalCvarManager->getCvar("sv_soccar_gamespeed");
+        if (speedCvar) speedCvar.setValue(*speed);
+    }
 
-	cvarManager->registerCvar("sf_save_attempts", "0", "Save attmempts to a file.", true, false, 0, false, 0, true).bindTo(saveToFile);
+    gameWrapper->HookEventWithCaller<CarWrapper>("Function TAGame.Car_TA.SetVehicleInput",
+        [this](CarWrapper car, void* params, std::string eventname) {
+            if (!gameWrapper || !*enabled || !loaded || !gameWrapper->IsInCustomTraining() || car.IsNull()) return;
 
-	cvarManager->registerCvar("sf_change_speed", "0", "Change game speed on consecutive hits and misses.", true, false, 0, false, 0, true).bindTo(changeSpeed);
-	cvarManager->registerCvar("sf_speed", "1.0", "Change game speed on consecutive hits and misses.", true, false, 0.0, false, 1.0, true).bindTo(speed);
-	cvarManager->registerCvar("sf_remember_speed", "1", "Remember last set speed.", true, true, 1, true, 1, true).bindTo(rememberSpeed);
-	cvarManager->registerCvar("sf_num_hits", "3", "Number of hits/misses before the speed increases/decreases.", true, true, 0, true, 50, true).bindTo(numHitsChangedSpeed);
-	cvarManager->registerCvar("sf_speed_increment", "0.05", "Speed increase/decrease increment.", true, true, 0.001, true, 0.999, true).bindTo(speedIncrement);
+            // Update speed from CVar if rememberSpeed is true
+            if (*rememberSpeed) {
+                CVarWrapper speedCvarRead = _globalCvarManager->getCvar("sv_soccar_gamespeed");
+                if (speedCvarRead) *this->speed = speedCvarRead.getFloatValue();
+            }
 
-	cvarManager->registerCvar("sf_left_angle", "-30", "Optimal left angle", true, true, -78, true, -12, true).bindTo(optimalLeftAngle);
-	cvarManager->registerCvar("sf_right_angle", "30", "Optimal right angle", true, true, 12, true, 78, true).bindTo(optimalRightAngle);
-	cvarManager->registerCvar("sf_cancel_threshold", "10", "Optimal flip cancel threshold.", true, true, 1, true, 15, true).bindTo(flipCancelThreshold);
+            ControllerInput* ci = (ControllerInput*)params;
+            PriWrapper pri = car.GetPRI(); // Get PRI for the car
+            if (pri.IsNull()) return;
 
-	cvarManager->registerCvar("sf_show_angle", "1", "Show angle meter.", true, false, 0, false, 0, true).bindTo(showAngleMeter);
-	cvarManager->registerCvar("sf_show_position", "1", "Show horizontal position meter.", true, false, 0, false, 0, true).bindTo(showPositionMeter);
-	cvarManager->registerCvar("sf_show_jump", "1", "Show jump meter.", true, false, 0, false, 0, true).bindTo(showJumpMeter);
-	cvarManager->registerCvar("sf_show_flip", "1", "Show flip cancel meter.", true, false, 0, false, 0, true).bindTo(showFlipMeter);
 
-	//cvarManager->registerCvar("sf_jump_low", "40", "Low threshold for first jump of speedflip.", true, true, 10, true, 110, false).bindTo(jumpLow);
-	//cvarManager->registerCvar("sf_jump_high", "90", "High threshold for first jump of speedflip.", true, true, 20, true, 120, false).bindTo(jumpHigh);
+            if (mode == SpeedFlipTrainerMode::Bot) {
+                PlayBot(ci);
+            }
+            else if (mode == SpeedFlipTrainerMode::Replay) {
+                PlayAttempt(&replayAttempt, ci);
+            }
 
-	if (*enabled)
-	{
-		gameWrapper->HookEventWithCaller<ActorWrapper>("Function TAGame.GameEvent_TrainingEditor_TA.LoadRound", [this](ActorWrapper cw, void* params, std::string eventName) {
-			if (!*enabled || !IsMustysPack((TrainingEditorWrapper)cw.memory_address))
-				return;
-			Hook();
-		});
 
-		gameWrapper->HookEventWithCaller<ActorWrapper>("Function TAGame.GameEvent_TrainingEditor_TA.Destroyed", [this](ActorWrapper cw, void* params, std::string eventName) {
-			if(loaded)
-				onUnload();
-		});
+            ServerWrapper server = gameWrapper->GetCurrentGameState();
+            if (server.IsNull()) return;
+            float timeLeft = server.GetGameTimeRemaining();
+            int currentFrame = gameWrapper->GetEngine().GetPhysicsFrame();
 
-		dataDir = gameWrapper->GetDataFolder().append("speedflip");
-		if (!std::filesystem::exists(dataDir))
-			std::filesystem::create_directories(dataDir);
+            if (initialTime <= 0 || timeLeft >= initialTime) { // Handles countdown not started or reset
+                // If time is reset (e.g. goal scored and new kickoff), re-capture initialTime
+                if (timeLeft > 0 && (initialTime <= 0 || timeLeft > initialTime + 0.1f /*debounce*/)) {
+                    initialTime = timeLeft;
+                    LOG("Initial time set to: {}", initialTime);
+                }
+                return;
+            }
 
-		attemptFileDialog.workingDirectory = dataDir / "attempts";
-		if (!std::filesystem::exists(attemptFileDialog.workingDirectory))
-			std::filesystem::create_directories(attemptFileDialog.workingDirectory);
-		attemptFileDialog.name = "Select replay attempt";
+            if (startingPhysicsFrame < 0 && timeLeft < initialTime && timeLeft > 0) { // Countdown has started
+                startingPhysicsFrame = currentFrame;
+                LOG("Attempt started at physics frame: {}", startingPhysicsFrame);
+                attempt = Attempt(); // Reset attempt data
+                attempt.initialCarLocation = car.GetLocation(); // Store initial location
 
-		botFileDialog.workingDirectory = dataDir / "bots";
-		if (!std::filesystem::exists(botFileDialog.workingDirectory))
-			std::filesystem::create_directories(botFileDialog.workingDirectory);
-		botFileDialog.name = "Select bot file";
-	}
+                if (!car.IsOnGround()) attempt.startedInAir = true;
+                if (!ci->ActivateBoost) attempt.startedNoBoost = true; // Check current input at start
+            }
 
+            // Only measure if the attempt has started (startingPhysicsFrame is set)
+            if (startingPhysicsFrame >= 0 && !attempt.exploded && !attempt.hit) {
+                Measure(car, pri);
+            }
+        });
+
+    gameWrapper->HookEvent("Function TAGame.Ball_TA.RecordCarHit",
+        [this](std::string eventname) {
+            if (!gameWrapper || !*enabled || !loaded || !gameWrapper->IsInCustomTraining() || attempt.hit || attempt.exploded || startingPhysicsFrame < 0) return;
+
+            BallWrapper ball = gameWrapper->GetGameEventAsServer().GetBall();
+            CarWrapper car = gameWrapper->GetLocalCar();
+            if (ball.IsNull() || car.IsNull()) return;
+
+            // Check if this car actually hit the ball
+            // This might require checking the last touch or a more robust hit detection
+            // For now, we assume any RecordCarHit during an active attempt is by the player.
+
+            // Impact frame might not be perfectly synced, use current frame relative to start
+            attempt.ticksToBall = gameWrapper->GetEngine().GetPhysicsFrame() - startingPhysicsFrame;
+            attempt.timeToBall = initialTime - gameWrapper->GetCurrentGameState().GetGameTimeRemaining(); // Time elapsed
+            attempt.hit = true;
+            LOG("Ball hit: {:.3f}s after {} ticks", attempt.timeToBall, attempt.ticksToBall);
+        });
+
+    gameWrapper->HookEvent("Function TAGame.Ball_TA.Explode",
+        [this](std::string eventName) {
+            if (!gameWrapper || !*enabled || !loaded || !gameWrapper->IsInCustomTraining() || startingPhysicsFrame < 0) return;
+
+            ServerWrapper server = gameWrapper->GetGameEventAsServer();
+            if (server.IsNull()) return;
+            BallWrapper ball = server.GetBall();
+            CarWrapper car = server.GetLocalPrimaryPlayer().GetCar(); // Get car from PRI
+            if (ball.IsNull() || car.IsNull()) return;
+
+            float distToBall = distance(ball.GetLocation(), car.GetLocation());
+            // float carRadius = 45; // Approximate radius of car collision cylinder
+            // float ballRadius = 46; // Approximate radius of ball collision sphere
+            // float meters = (distToBall - carRadius - ballRadius) / 100.0f; // Distance between surfaces
+            float meters = distToBall / 100.0f; // Center to center distance in meters
+            LOG("Ball exploded. Distance to ball center = {:.1f}m", meters);
+
+            attempt.exploded = true; // Means a miss
+            attempt.hit = false; // Can't hit if it exploded before contact
+        });
+
+    gameWrapper->HookEventPost("Function Engine.Controller.Restart", // Or "Function TAGame.GameEvent_Soccar_TA.ResetRound"
+        [this](std::string eventName) {
+            if (!gameWrapper || !*enabled || !loaded || !gameWrapper->IsInCustomTraining()) return;
+
+            LOG("Round restarted (Controller.Restart)");
+
+            ServerWrapper server = gameWrapper->GetCurrentGameState();
+            if (!server.IsNull()) initialTime = server.GetGameTimeRemaining();
+            else initialTime = 0; // Fallback
+
+            startingPhysicsFrame = -1; // Reset for next attempt
+
+            if (attempt.hit && !attempt.exploded) {
+                consecutiveHits++;
+                consecutiveMiss = 0;
+            }
+            else if (attempt.inputs.size() > 0) { // Only count as miss if an attempt was made
+                consecutiveHits = 0;
+                consecutiveMiss++;
+            }
+
+            if (*saveToFile && attempt.inputs.size() > 0) {
+                if (!std::filesystem::exists(dataDir)) { // Ensure directory exists
+                    std::filesystem::create_directories(dataDir);
+                }
+                auto path = attempt.GetFilename(dataDir / "attempts"); // Save in subdirectory
+                if (!std::filesystem::exists(dataDir / "attempts")) {
+                    std::filesystem::create_directories(dataDir / "attempts");
+                }
+                attempt.WriteInputsToFile(path);
+                LOG("Saved attempt to: {}", path.string());
+            }
+
+            CVarWrapper speedCvar = _globalCvarManager->getCvar("sv_soccar_gamespeed");
+            if (!speedCvar) return;
+            float currentSpeed = speedCvar.getFloatValue();
+
+            if (*changeSpeed) {
+                bool speedChanged = false;
+                if (consecutiveHits > 0 && consecutiveHits % (*numHitsChangedSpeed) == 0) {
+                    gameWrapper->LogToChatbox(std::to_string(consecutiveHits) + (consecutiveHits > 1 ? " hits" : " hit") + " in a row!");
+                    currentSpeed += *speedIncrement;
+                    speedChanged = true;
+                }
+                else if (consecutiveMiss > 0 && consecutiveMiss % (*numHitsChangedSpeed) == 0) {
+                    gameWrapper->LogToChatbox(std::to_string(consecutiveMiss) + (consecutiveMiss > 1 ? " misses" : " miss") + " in a row.");
+                    currentSpeed -= *speedIncrement;
+                    if (currentSpeed < 0.1f) currentSpeed = 0.1f; // Minimum speed
+                    speedChanged = true;
+                }
+
+                if (speedChanged) {
+                    speedCvar.setValue(currentSpeed);
+                    *this->speed = currentSpeed; // Update plugin's speed variable
+                    LOG("Game speed changed to: {:.3f}", currentSpeed);
+                    gameWrapper->LogToChatbox(fmt::format("Game speed set to: {:.0f}%", currentSpeed * 100));
+                }
+            }
+        });
 }
 
-void SpeedFlipTrainer::onUnload()
-{
-	if (!loaded)
-		return;
-	loaded = false;
+void SpeedFlipTrainer::onLoad() {
+    _globalCvarManager = cvarManager;
+    LOG("SpeedFlipTrainer onLoad start");
 
-	LOG("Unhooking");
-	gameWrapper->UnhookEvent("Function TAGame.Car_TA.SetVehicleInput");
-	gameWrapper->UnhookEvent("Function TAGame.Ball_TA.RecordCarHit");
-	gameWrapper->UnhookEvent("Function TAGame.Ball_TA.Explode");
-	gameWrapper->UnhookEventPost("Function Engine.Controller.Restart"); 
-	gameWrapper->UnregisterDrawables();
+    // Bind CVars to shared_ptr members
+    cvarManager->registerCvar("sf_show_axes", "1", "Show car orientation axes.", true, true, 0, true, 1)
+        .bindTo(showCarAxes);
+    cvarManager->registerCvar("sf_axis_length", "150.0", "Length of car orientation axes.", true, true, 50.0f, true, 500.0f)
+        .bindTo(axisLength);
+    cvarManager->registerCvar("sf_enabled", "1", "Enable Speedflip trainer plugin.", true, true, 0, true, 1)
+        .bindTo(enabled);
+    cvarManager->getCvar("sf_enabled").addOnValueChanged([this](const std::string& oldVal, CVarWrapper cvar) {
+        if (*enabled) Hook(); else onUnload(); // Hook/unhook based on new value
+        });
+
+    cvarManager->registerCvar("sf_show_angle", "1", "Show dodge angle meter.").bindTo(showAngleMeter);
+    cvarManager->registerCvar("sf_show_position", "1", "Show horizontal position meter.").bindTo(showPositionMeter);
+    cvarManager->registerCvar("sf_show_jump", "1", "Show first jump timing meter.").bindTo(showJumpMeter);
+    cvarManager->registerCvar("sf_show_flip", "1", "Show flip cancel timing meter.").bindTo(showFlipMeter);
+
+    cvarManager->registerCvar("sf_save_attempts", "0", "Save attempts to a file.").bindTo(saveToFile);
+    cvarManager->registerCvar("sf_change_speed", "0", "Change game speed on consecutive hits/misses.").bindTo(changeSpeed);
+    cvarManager->registerCvar("sf_speed", "1.0", "Current game speed multiplier for training.").bindTo(speed); // Should be float
+    cvarManager->registerCvar("sf_remember_speed", "1", "Remember last set speed.").bindTo(rememberSpeed);
+    cvarManager->registerCvar("sf_num_hits", "3", "Number of hits/misses for speed change.").bindTo(numHitsChangedSpeed);
+    cvarManager->registerCvar("sf_speed_increment", "0.05", "Speed increment/decrement value.").bindTo(speedIncrement);
+
+    cvarManager->registerCvar("sf_left_angle", "-30", "Optimal left dodge angle (degrees).").bindTo(optimalLeftAngle);
+    cvarManager->registerCvar("sf_right_angle", "30", "Optimal right dodge angle (degrees).").bindTo(optimalRightAngle);
+    cvarManager->registerCvar("sf_cancel_threshold", "13", "Optimal flip cancel threshold (ticks).").bindTo(flipCancelThreshold); // Defaulting to 13 as per analysis
+
+    // CVars for jump timing (used in RenderFirstJumpMeter)
+    cvarManager->registerCvar("sf_jump_low", "40", "Low threshold for first jump (ticks).").bindTo(jumpLow);
+    cvarManager->registerCvar("sf_jump_high", "90", "High threshold for first jump (ticks).").bindTo(jumpHigh);
+
+
+    if (gameWrapper) { // Ensure gameWrapper is available
+        dataDir = gameWrapper->GetDataFolder() / "SpeedFlipTrainer"; // Plugin specific folder
+        if (!std::filesystem::exists(dataDir)) {
+            std::filesystem::create_directories(dataDir);
+        }
+        if (!std::filesystem::exists(dataDir / "attempts")) {
+            std::filesystem::create_directories(dataDir / "attempts");
+        }
+        if (!std::filesystem::exists(dataDir / "bots")) {
+            std::filesystem::create_directories(dataDir / "bots");
+        }
+
+        // Setup ImGuiFileDialog
+        // Attempt File Dialog
+        attemptFileDialog.SetTitle("Select Replay Attempt");
+        attemptFileDialog.SetTypeFilters({ ".txt" });
+        attemptFileDialog.SetPwd(dataDir / "attempts");
+
+        // Bot File Dialog
+        botFileDialog.SetTitle("Select Bot File");
+        botFileDialog.SetTypeFilters({ ".txt" });
+        botFileDialog.SetPwd(dataDir / "bots");
+
+
+        // Hook into training pack loading if plugin is enabled
+        // Check if already in Musty's pack when plugin loads
+        if (*enabled) {
+            if (gameWrapper->IsInCustomTraining()) {
+                TrainingEditorWrapper trainingEditor = gameWrapper->GetTrainingEditor();
+                if (IsMustysPack(trainingEditor)) {
+                    Hook();
+                }
+            }
+            // Hook for when training is loaded/changed
+            gameWrapper->HookEventWithCaller<ActorWrapper>("Function TAGame.GameEvent_TrainingEditor_TA.LoadRound",
+                [this](ActorWrapper cw, void* params, std::string eventName) {
+                    if (*enabled && IsMustysPack(TrainingEditorWrapper(cw.memory_address))) {
+                        Hook();
+                    }
+                    else {
+                        onUnload(); // Unhook if not Musty's pack or plugin disabled
+                    }
+                });
+
+            gameWrapper->HookEventWithCaller<ActorWrapper>("Function TAGame.GameEvent_TrainingEditor_TA.Destroyed",
+                [this](ActorWrapper cw, void* params, std::string eventName) {
+                    if (loaded) onUnload(); // Unhook when leaving training
+                });
+        }
+    }
+    else {
+        LOG("gameWrapper is null during onLoad, cannot set up data directory or hooks correctly.");
+    }
+    LOG("SpeedFlipTrainer onLoad finished.");
 }
 
-bool SpeedFlipTrainer::IsMustysPack(TrainingEditorWrapper tw)
-{
-	if (!tw.IsNull())
-	{
-		GameEditorSaveDataWrapper data = tw.GetTrainingData();
-		if (!data.IsNull())
-		{
-			TrainingEditorSaveDataWrapper td = data.GetTrainingData();
-			if (!td.IsNull())
-			{
-				if (!td.GetCode().IsNull())
-				{
-					auto code = td.GetCode().ToString();
-					if (code == "A503-264C-A7EB-D282")
-					{
-						return true;
-					}
-				}
-			}
-		}
-	}
-	return false;
+
+void SpeedFlipTrainer::onUnload() {
+    if (!loaded) return;
+    loaded = false;
+    LOG("Unhooking events and unregistering drawables");
+    gameWrapper->UnhookEvent("Function TAGame.Car_TA.SetVehicleInput");
+    gameWrapper->UnhookEvent("Function TAGame.Ball_TA.RecordCarHit");
+    gameWrapper->UnhookEvent("Function TAGame.Ball_TA.Explode");
+    gameWrapper->UnhookEventPost("Function Engine.Controller.Restart");
+    gameWrapper->UnregisterDrawables();
 }
 
-void SpeedFlipTrainer::RenderPositionMeter(CanvasWrapper canvas, float screenWidth, float screenHeight)
-{
-	float mid = -1.1;
-	int range = 200;
-	int relLocation = (-1 * attempt.positionY) + range;
-	int totalUnits = range * 2;
-
-	float opacity = 1.0;
-	Vector2 reqSize = Vector2{ (int)(screenWidth * 70 / 100.f), (int)(screenHeight * 4 / 100.f) };
-	int unitWidth = reqSize.X / totalUnits;
-
-	Vector2 boxSize = Vector2{ unitWidth * totalUnits, reqSize.Y };
-	Vector2 startPos = Vector2{ (int)((screenWidth/2) - (boxSize.X/2)), (int)(screenHeight * 10 / 100.f) };
-
-	struct Color baseColor = { (char)255, (char)255, (char)255, opacity };
-	struct Line border = { (char)255, (char)255, (char)255, opacity, 2 };
-
-	std::list<MeterRange> ranges;
-	if (startingPhysicsFrame > 0)
-	{
-		float go = 1, ro = 1, yo = 1;
-		if (relLocation >= range - 80 && relLocation <= range + 80)
-		{
-			ranges.push_back({ (char)50, (char)255, (char)50, go, range - 80, range + 80 });
-		}
-		else if (relLocation >= range - 160 && relLocation <= range + 160)
-		{
-			ranges.push_back({ (char)255, (char)255, (char)50, yo,  range - 160, range + 160 });
-			ranges.push_back({ (char)255, (char)255, (char)50, yo,  range - 160, range + 160 });
-		}
-		else
-		{
-			ranges.push_back({ (char)255,(char)50, (char)50, ro, 0, totalUnits });
-		}
-	}
-
-	std::list<MeterMarking> markings;
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, unitWidth, range - 80 });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, unitWidth, range + 80 });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, unitWidth, range - 160 });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, unitWidth, range + 160 });
-	markings.push_back({ (char)0, (char)0, (char)0, 0.6, unitWidth*2, relLocation });
-
-	RenderMeter(canvas, startPos, reqSize, baseColor, border, totalUnits, ranges, markings, false);
-
-	//draw speed label	
-	auto speedCvar = _globalCvarManager->getCvar("sv_soccar_gamespeed");
-	float speed = speedCvar.getFloatValue();
-	string msg = fmt::format("Game speed: {0}%", (int)(speed * 100));
-	int width = (msg.length() * 8.5) - 10;
-	canvas.SetColor(255, 255, 255, (char)(255 * opacity));
-	canvas.SetPosition(Vector2{ startPos.X + boxSize.X - width, (int)(startPos.Y - 20) });
-	canvas.DrawString(msg, 1, 1, true, false);
-
-	int ms = (int)(attempt.ticksNotPressingBoost / 120.0 * 1000.0);
-	if (ms != 0)
-	{
-		canvas.SetColor(255, 255, 50, (char)(255 * opacity));
-		//draw time not pressing boost label
-		msg = fmt::format("Not pressing Boost: {0}ms", ms);
-		width = 200;
-		canvas.SetPosition(Vector2{ startPos.X, (int)(startPos.Y + boxSize.Y + 10) });
-		canvas.DrawString(msg, 1, 1, true, false);
-	}
-
-	ms = (int)(attempt.ticksNotPressingThrottle / 120.0 * 1000.0);
-	if (ms != 0)
-	{
-		canvas.SetColor(255, 255, 50, (char)(255 * opacity));
-		//draw time not pressing throttle label
-		msg = fmt::format("Not pressing Throttle: {0}ms", ms);
-		width = 200;
-		canvas.SetPosition(Vector2{ startPos.X, (int)(startPos.Y + boxSize.Y + 25) });
-		canvas.DrawString(msg, 1, 1, true, false);
-	}
+bool SpeedFlipTrainer::IsMustysPack(TrainingEditorWrapper tw) {
+    if (tw.IsNull()) return false;
+    GameEditorSaveDataWrapper data = tw.GetTrainingData();
+    if (data.IsNull()) return false;
+    TrainingEditorSaveDataWrapper td = data.GetTrainingData();
+    if (td.IsNull() || td.GetCode().IsNull()) return false;
+    return td.GetCode().ToString() == "A503-264C-A7EB-D282";
 }
 
-void SpeedFlipTrainer::RenderFirstJumpMeter(CanvasWrapper canvas, float screenWidth, float screenHeight)
-{
-	int totalUnits = *jumpHigh - *jumpLow;
-	int halfMark = totalUnits / 2;
-	
-	float opacity = 1.0;
-	Vector2 reqSize = Vector2{ (int)(screenWidth * 2 / 100.f), (int)(screenHeight * 56 / 100.f) };
-	int unitWidth = reqSize.Y / totalUnits;
+// --- Meter Rendering Functions ---
+// Using CustomColor where appropriate, and ensuring correct types for list elements.
 
-	Vector2 boxSize = Vector2{ reqSize.X, unitWidth * totalUnits };
-	Vector2 startPos = Vector2{ (int)((screenWidth * 75 / 100.f) + 2.5 * reqSize.X), (int)((screenHeight * 80 / 100.f) - boxSize.Y) };
-	
-	struct Color baseColor = { (char)255, (char)255, (char)255, opacity };
-	struct Line border = { (char)255, (char)255, (char)255, opacity, 2 };
+void SpeedFlipTrainer::RenderPositionMeter(CanvasWrapper canvas, float screenWidth, float screenHeight) {
+    // This meter seems to track deviation from a Y-centerline.
+    // The original logic for `relLocation` and `range` implies a specific setup.
+    // For now, focusing on fixing type errors.
 
-	
-	std::list<MeterMarking> markings;
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, (int)(halfMark - 15) });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, (int)(halfMark - 10) });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, (int)(halfMark + 5) });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, (int)(halfMark + 10) });
+    // Original logic:
+    // float mid = -1.1; // Unused
+    // int range = 200; // Half-width of the meter in abstract units
+    // int relLocation = (-1 * attempt.currentPosition.Y) + range; // currentPosition.Y is world units
+    // int totalUnits = range * 2;
 
-	std::list<MeterRange> ranges;
-	ranges.push_back({ (char)255, (char)255, (char)50, 0.2, (int)(halfMark - 15), (int)(halfMark - 10) });
-	ranges.push_back({ (char)50,(char)255, (char)50, 0.2, (int)(halfMark - 10), (int)(halfMark + 5) });
-	ranges.push_back({ (char)255,(char)255, (char)50, 0.2, (int)(halfMark + 5), (int)(halfMark + 10) });
+    // Let's assume the meter shows deviation from the initial Y position.
+    // Max deviation to show: +/- 2000 world units (e.g.)
+    float maxDeviation = 2000.0f;
+    float currentYDeviation = attempt.currentPosition.Y - attempt.initialCarLocation.Y;
 
-	if (attempt.jumped)
-	{
-		int ticks = attempt.jumpTick - ((*jumpHigh - (halfMark)) - halfMark);
-		if (ticks < 0)
-		{
-			ticks = 0;
-		}
-		else if (ticks > totalUnits)
-		{
-			ticks = totalUnits;
-		}
+    // Map currentYDeviation to meter range [0, totalUnits]
+    // Meter center (0 deviation) should be at totalUnits / 2
+    int totalMeterUnits = 400; // Arbitrary number of "slots" in the meter display
+    int centerMark = totalMeterUnits / 2;
+    // Scale: how many world units per meter unit
+    float scale = (maxDeviation * 2) / totalMeterUnits;
+    int meterValue = centerMark + static_cast<int>(currentYDeviation / scale);
+    meterValue = std::max(0, std::min(totalMeterUnits, meterValue));
 
-		if (ticks < halfMark - 15)
-		{
-			ranges.push_back({ (char)255,(char)50, (char)50, 1, 0, halfMark - 15 });
-		}
-		else if (ticks < halfMark - 10)
-		{
-			ranges.push_back({ (char)255, (char)255, (char)50, 1, (int)(halfMark - 15), (int)(halfMark - 10) });
-		}
-		else if (ticks < halfMark + 5)
-		{
-			ranges.push_back({ (char)50,(char)255, (char)50, 1, (int)(halfMark - 10), (int)(halfMark + 5) });
-		}
-		else if (ticks < halfMark + 10)
-		{
-			ranges.push_back({ (char)255,(char)255, (char)50, 1, (int)(halfMark + 5), (int)(halfMark + 10) });
-		}
-		else
-		{
-			ranges.push_back({ (char)255,(char)50, (char)50, 1, (int)(halfMark + 10), totalUnits });
-		}
-		markings.push_back({ (char)0, (char)0, (char)0, 0.6, (int)reqSize.Y / totalUnits, (int)ticks });
-	}
 
-	RenderMeter(canvas, startPos, reqSize, baseColor, border, totalUnits, ranges, markings, true);
+    float opacity = 1.0f;
+    Vector2 reqSize = { static_cast<int>(screenWidth * 0.7f), static_cast<int>(screenHeight * 0.04f) };
+    Vector2 startPos = { static_cast<int>((screenWidth / 2) - (reqSize.X / 2)), static_cast<int>(screenHeight * 0.1f) };
 
-	//draw label
-	string msg = "First Jump";
-	canvas.SetColor(255, 255, 255, (char)(255 * opacity));
-	canvas.SetPosition(Vector2{ (int)(startPos.X - 13), (int)(startPos.Y + boxSize.Y + 8) });
-	canvas.DrawString(msg, 1, 1, true, false);
+    CustomColor baseC(255, 255, 255, opacity);
+    LineStyle borderS(CustomColor(255, 255, 255, opacity), 2);
 
-	auto ms = (int)(attempt.jumpTick * 1.0 / 120.0 * 1000.0 / 1.0);
-	msg = to_string(ms) + " ms";
-	canvas.SetPosition(Vector2{ startPos.X, (int)(startPos.Y + boxSize.Y + 8 + 15) });
-	canvas.DrawString(msg, 1, 1, true, false);
+    std::list<MeterRange> ranges;
+    // Example ranges: green for small deviation, yellow for medium, red for large
+    int greenZone = static_cast<int>(totalMeterUnits * 0.1); // +/- 10% deviation
+    int yellowZone = static_cast<int>(totalMeterUnits * 0.3); // +/- 30% deviation
+
+    // Green zone
+    ranges.push_back({ CustomColor(50, 255, 50, 0.7f), centerMark - greenZone, centerMark + greenZone });
+    // Yellow zones
+    ranges.push_back({ CustomColor(255, 255, 50, 0.7f), centerMark - yellowZone, centerMark - greenZone });
+    ranges.push_back({ CustomColor(255, 255, 50, 0.7f), centerMark + greenZone, centerMark + yellowZone });
+    // Red zones (outer)
+    ranges.push_back({ CustomColor(255, 50, 50, 0.7f), 0, centerMark - yellowZone });
+    ranges.push_back({ CustomColor(255, 50, 50, 0.7f), centerMark + yellowZone, totalMeterUnits });
+
+
+    std::list<MeterMarking> markings;
+    markings.push_back({ CustomColor(255,255,255,opacity), 1, centerMark - greenZone });
+    markings.push_back({ CustomColor(255,255,255,opacity), 1, centerMark + greenZone });
+    markings.push_back({ CustomColor(255,255,255,opacity), 1, centerMark - yellowZone });
+    markings.push_back({ CustomColor(255,255,255,opacity), 1, centerMark + yellowZone });
+    markings.push_back({ CustomColor(0,0,0,0.6f), 2, meterValue }); // Current position marker
+
+    RenderMeter(canvas, startPos, reqSize, baseC, borderS, totalMeterUnits, ranges, markings, false);
+
+    // Game speed display
+    CVarWrapper speedCvar = _globalCvarManager->getCvar("sv_soccar_gamespeed");
+    if (speedCvar) {
+        float gameSpeed = speedCvar.getFloatValue();
+        std::string speedMsg = fmt::format("Game Speed: {:.0f}%", gameSpeed * 100);
+        Vector2 textSize = canvas.GetStringSize(speedMsg);
+        canvas.SetColor(255, 255, 255, static_cast<unsigned char>(255 * opacity));
+        canvas.SetPosition(Vector2{ startPos.X + reqSize.X - textSize.X - 5, startPos.Y - textSize.Y - 2 });
+        canvas.DrawString(speedMsg);
+    }
+
+    // Boost/Throttle warnings
+    int textYOffset = reqSize.Y + 5;
+    if (attempt.ticksNotPressingBoost > 0) {
+        std::string boostMsg = fmt::format("No Boost: {}ms", static_cast<int>(attempt.ticksNotPressingBoost / 120.0f * 1000.0f));
+        canvas.SetColor(255, 255, 50, static_cast<unsigned char>(255 * opacity));
+        canvas.SetPosition(Vector2{ startPos.X, startPos.Y + textYOffset });
+        canvas.DrawString(boostMsg);
+        textYOffset += 15;
+    }
+    if (attempt.ticksNotPressingThrottle > 0) {
+        std::string throttleMsg = fmt::format("No Throttle: {}ms", static_cast<int>(attempt.ticksNotPressingThrottle / 120.0f * 1000.0f));
+        canvas.SetColor(255, 255, 50, static_cast<unsigned char>(255 * opacity));
+        canvas.SetPosition(Vector2{ startPos.X, startPos.Y + textYOffset });
+        canvas.DrawString(throttleMsg);
+    }
 }
 
-void SpeedFlipTrainer::RenderFlipCancelMeter(CanvasWrapper canvas, float screenWidth, float screenHeight)
-{
-	float opacity = 1.0;
-	int totalUnits = *flipCancelThreshold;
 
-	Vector2 reqSize = Vector2{ (int)(screenWidth * 2 / 100.f), (int)(screenHeight * 55 / 100.f) };
-	int unitWidth = reqSize.Y / totalUnits;
+void SpeedFlipTrainer::RenderFirstJumpMeter(CanvasWrapper canvas, float screenWidth, float screenHeight) {
+    int minTicks = *jumpLow;  // e.g., 40 ticks
+    int maxTicks = *jumpHigh; // e.g., 90 ticks
+    int totalMeterUnits = maxTicks - minTicks;
+    if (totalMeterUnits <= 0) return;
 
-	Vector2 boxSize = Vector2{ reqSize.X, unitWidth * totalUnits };
-	Vector2 startPos = Vector2{ (int)(screenWidth * 75 / 100.f), (int)((screenHeight * 80 / 100.f) - boxSize.Y) };
+    // Define "good" zone, e.g. 50-60 ticks for a speedflip first jump
+    int optimalLow = 50 - minTicks; // Optimal low relative to meter start
+    int optimalHigh = 60 - minTicks; // Optimal high relative to meter start
+    optimalLow = std::max(0, std::min(totalMeterUnits, optimalLow));
+    optimalHigh = std::max(0, std::min(totalMeterUnits, optimalHigh));
 
-	struct Color baseColor = { (char)255, (char)255, (char)255, opacity };
-	struct Line border = { (char)255, (char)255, (char)255, opacity, 2 };
 
-	auto tickBeforeCancel = attempt.flipCancelTick - attempt.dodgedTick;
+    float opacity = 1.0f;
+    Vector2 reqSize = { static_cast<int>(screenWidth * 0.02f), static_cast<int>(screenHeight * 0.56f) };
+    Vector2 startPos = { static_cast<int>((screenWidth * 0.75f) + 2.5f * reqSize.X), static_cast<int>((screenHeight * 0.8f) - reqSize.Y) };
 
-	// flip cancel time range
-	std::list<MeterRange> ranges;
-	if (attempt.flipCanceled)
-	{
-		auto ticks = tickBeforeCancel > totalUnits ? totalUnits : tickBeforeCancel;
-		struct Color meterColor;
-		if (ticks <= (int)(totalUnits * 0.6f))
-			meterColor = { (char)50, (char)255, (char)50, 0.7 }; // green
-		else if (ticks <= (int)(totalUnits * 0.9f))
-			meterColor = { (char)255, (char)255, (char)50, 0.7 }; // yellow
-		else
-			meterColor = { (char)255, (char)50, (char)50, 0.7 }; // red
-		ranges.push_back({ meterColor.red, meterColor.green, meterColor.blue, 1, 0, ticks });
-	}
+    CustomColor baseC(255, 255, 255, opacity);
+    LineStyle borderS(CustomColor(255, 255, 255, opacity), 2);
 
-	std::list<MeterMarking> markings;
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, ((int)(totalUnits * 0.6f)) });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, ((int)(totalUnits * 0.9f)) });
-	//markings.push_back({ (char)0, (char)0, (char)0, 0.6, 10, ticks });
+    std::list<MeterMarking> markings;
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, optimalLow });
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, optimalHigh });
 
-	RenderMeter(canvas, startPos, reqSize, baseColor, border, totalUnits, ranges, markings, true);
 
-	//draw label
-	string msg = "Flip Cancel";
-	canvas.SetColor(255, 255, 255, (char)(255 * opacity));
-	canvas.SetPosition(Vector2{ (int)(startPos.X - 16), (int)(startPos.Y + boxSize.Y + 8) });
-	canvas.DrawString(msg, 1, 1, true, false);
+    std::list<MeterRange> ranges;
+    // Green zone (optimal)
+    ranges.push_back({ CustomColor(50, 255, 50, 0.7f), optimalLow, optimalHigh });
+    // Yellow zones (acceptable but not perfect)
+    int yellowBuffer = 5; // 5 ticks buffer for yellow
+    ranges.push_back({ CustomColor(255, 255, 50, 0.7f), std::max(0, optimalLow - yellowBuffer), optimalLow });
+    ranges.push_back({ CustomColor(255, 255, 50, 0.7f), optimalHigh, std::min(totalMeterUnits, optimalHigh + yellowBuffer) });
+    // Red zones (too early/late)
+    ranges.push_back({ CustomColor(255, 50, 50, 0.7f), 0, std::max(0, optimalLow - yellowBuffer) });
+    ranges.push_back({ CustomColor(255, 50, 50, 0.7f), std::min(totalMeterUnits, optimalHigh + yellowBuffer), totalMeterUnits });
 
-	auto ms = (int)(tickBeforeCancel * 1.0 / 120.0 * 1000.0 / 1.0);
-	msg = to_string(ms) + " ms";
-	canvas.SetPosition(Vector2{ startPos.X, (int)(startPos.Y + boxSize.Y + 8 + 15) });
-	canvas.DrawString(msg, 1, 1, true, false);
+
+    if (attempt.jumped) {
+        int jumpTickRelative = attempt.jumpTick - minTicks;
+        jumpTickRelative = std::max(0, std::min(totalMeterUnits, jumpTickRelative));
+        markings.push_back({ CustomColor(0,0,0,0.8f), 2, jumpTickRelative }); // Current jump tick marker
+    }
+
+    RenderMeter(canvas, startPos, reqSize, baseC, borderS, totalMeterUnits, ranges, markings, true);
+
+    std::string label = "First Jump";
+    Vector2 labelSize = canvas.GetStringSize(label);
+    canvas.SetColor(255, 255, 255, static_cast<unsigned char>(255 * opacity));
+    canvas.SetPosition(Vector2{ startPos.X + reqSize.X / 2 - labelSize.X / 2, startPos.Y + reqSize.Y + 8 });
+    canvas.DrawString(label);
+
+    if (attempt.jumped) {
+        std::string msLabel = fmt::format("{}ms", static_cast<int>(attempt.jumpTick / 120.0f * 1000.0f));
+        Vector2 msLabelSize = canvas.GetStringSize(msLabel);
+        canvas.SetPosition(Vector2{ startPos.X + reqSize.X / 2 - msLabelSize.X / 2, startPos.Y + reqSize.Y + 8 + 15 });
+        canvas.DrawString(msLabel);
+    }
 }
 
-void SpeedFlipTrainer::RenderAngleMeter(CanvasWrapper canvas, float screenWidth, float screenHeight)
-{
-	// Cap angle at 90
-	int totalUnits = 180;
-	
-	float opacity = 1.0;
-	Vector2 reqSize = Vector2{ (int)(screenWidth * 66 / 100.f), (int)(screenHeight * 4 / 100.f) };
-	int unitWidth = reqSize.X / totalUnits;
+void SpeedFlipTrainer::RenderFlipCancelMeter(CanvasWrapper canvas, float screenWidth, float screenHeight) {
+    float opacity = 1.0f;
+    int totalMeterUnits = *flipCancelThreshold * 2; // Give some room for late cancels, up to 2x threshold
+    int idealCancelPoint = *flipCancelThreshold; // Target is the threshold itself or slightly less
 
-	Vector2 boxSize = Vector2{ unitWidth * totalUnits, reqSize.Y };
-	Vector2 startPos = Vector2{ (int)((screenWidth / 2) - (boxSize.X / 2)), (int)(screenHeight * 90 / 100.f) };
+    Vector2 reqSize = { static_cast<int>(screenWidth * 0.02f), static_cast<int>(screenHeight * 0.55f) };
+    Vector2 startPos = { static_cast<int>(screenWidth * 0.75f), static_cast<int>((screenHeight * 0.8f) - reqSize.Y) };
 
-	struct Color baseColor = { (char)255, (char)255, (char)255, opacity };
-	struct Line border = { (char)255, (char)255, (char)255, opacity, 2 };
+    CustomColor baseC(255, 255, 255, opacity);
+    LineStyle borderS(CustomColor(255, 255, 255, opacity), 2);
 
-	std::list<MeterRange> ranges;
-	std::list<MeterMarking> markings;
+    std::list<MeterRange> ranges;
+    // Green: 0 to idealCancelPoint
+    ranges.push_back({ CustomColor(50, 255, 50, 0.7f), 0, idealCancelPoint });
+    // Yellow: idealCancelPoint to idealCancelPoint + 50% of threshold
+    ranges.push_back({ CustomColor(255, 255, 50, 0.7f), idealCancelPoint, static_cast<int>(idealCancelPoint * 1.5f) });
+    // Red: Beyond that
+    ranges.push_back({ CustomColor(255, 50, 50, 0.7f), static_cast<int>(idealCancelPoint * 1.5f), totalMeterUnits });
 
-	int greenRange = 8, yellowRange = 15;
-	int lTarget = *optimalLeftAngle + 90;
-	int rTarget = *optimalRightAngle + 90;
+    std::list<MeterMarking> markings;
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, idealCancelPoint });
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, static_cast<int>(idealCancelPoint * 1.5f) });
 
-	int lyl = lTarget - yellowRange;
-	int lgl = lTarget - greenRange;
-	int lgh = lTarget + greenRange;
-	int lyh = lTarget + yellowRange;
 
-	int ryl = rTarget - yellowRange;
-	int rgl = rTarget - greenRange;
-	int rgh = rTarget + greenRange;
-	int ryh = rTarget + yellowRange;
+    if (attempt.flipCanceled) {
+        int ticksAfterDodge = attempt.flipCancelTick - attempt.dodgedTick;
+        ticksAfterDodge = std::max(0, std::min(totalMeterUnits, ticksAfterDodge));
+        markings.push_back({ CustomColor(0,0,0,0.8f), 2, ticksAfterDodge });
+    }
 
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, lgh });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, lyh });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, lgl });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, lyl });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, rgh });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, ryh });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, rgl });
-	markings.push_back({ (char)255, (char)255, (char)255, opacity, 3, ryl });
+    RenderMeter(canvas, startPos, reqSize, baseC, borderS, totalMeterUnits, ranges, markings, true);
 
-	ranges.push_back({ (char)255, (char)255, (char)50, 0.2, lyl, lgl });
-	ranges.push_back({ (char)50, (char)255, (char)50, 0.2, lgl, lgh });
-	ranges.push_back({ (char)255, (char)255, (char)50, 0.2, lgh, lyh });
-	ranges.push_back({ (char)255, (char)255, (char)50, 0.2, ryl, rgl });
-	ranges.push_back({ (char)50, (char)255, (char)50, 0.2, rgl, rgh });
-	ranges.push_back({ (char)255, (char)255, (char)50, 0.2, rgh, ryh });
+    std::string label = "Flip Cancel";
+    Vector2 labelSize = canvas.GetStringSize(label);
+    canvas.SetColor(255, 255, 255, static_cast<unsigned char>(255 * opacity));
+    canvas.SetPosition(Vector2{ startPos.X + reqSize.X / 2 - labelSize.X / 2, startPos.Y + reqSize.Y + 8 });
+    canvas.DrawString(label);
 
-	if (attempt.dodged)
-	{
-		int angle = attempt.dodgeAngle;
-		if (angle > 90) angle = 90;
-		if (angle < -90) angle = -90;
-
-		int angleAdjusted = 90 + angle;
-		markings.push_back({ (char)0, (char)0, (char)0, 0.6, unitWidth, angleAdjusted });
-
-		if (angleAdjusted < lyl)
-		{
-			ranges.push_back({ (char)255,(char)50, (char)50, 1, 0, lyl });
-		}
-		else if (angleAdjusted < lgl)
-		{
-			ranges.push_back({ (char)255, (char)255, (char)50, 1, lTarget - yellowRange, lTarget - greenRange });
-		}
-		else if (angleAdjusted < lgh)
-		{
-			ranges.push_back({ (char)50, (char)255, (char)50, 1, lTarget - greenRange, lTarget + greenRange });
-		}
-		else if (angleAdjusted < lyh)
-		{
-			ranges.push_back({ (char)255, (char)255, (char)50, 1, lTarget + greenRange, lTarget + yellowRange });
-		}
-		else if (angleAdjusted < ryl)
-		{
-			ranges.push_back({ (char)255,(char)50, (char)50, 1, lTarget + yellowRange, rTarget - yellowRange });
-		}
-		else if (angleAdjusted < rgl)
-		{
-			ranges.push_back({ (char)255, (char)255, (char)50, 1, rTarget - yellowRange, rTarget - greenRange });
-		}
-		else if (angleAdjusted < rgh)
-		{
-			ranges.push_back({ (char)50, (char)255, (char)50, 1, rTarget - greenRange, rTarget + greenRange });
-		}
-		else if (angleAdjusted < ryh)
-		{
-			ranges.push_back({ (char)255, (char)255, (char)50, 1, rTarget + greenRange, rTarget + yellowRange });
-		}
-		else
-		{
-			ranges.push_back({ (char)255, (char)50, (char)50, 1, rTarget + yellowRange, totalUnits });
-		}
-	}
-
-	RenderMeter(canvas, startPos, reqSize, baseColor, border, totalUnits, ranges, markings, false);
-
-	//draw angle label
-	canvas.SetColor(255, 255, 255, (char)(255 * opacity));
-	canvas.SetPosition(Vector2{ startPos.X, (int)(startPos.Y - 20) });
-	canvas.DrawString("Dodge Angle: " + to_string(attempt.dodgeAngle) + " DEG", 1, 1, true, false);
-
-	//draw time to ball label
-	if (attempt.hit && attempt.ticksToBall > 0)
-	{
-		auto ms = attempt.ticksToBall * 1.0 / 120.0;
-		//string msg = fmt::format("Time to ball: {0:.3f}s", attempt.timeToBall);
-		string msg = fmt::format("Time to ball: {0:.4f}s", ms);
-
-		int width = (msg.length() * 8) - (5 * 3); // 8 pixels per char - 5 pixels per space
-
-		canvas.SetColor(255, 255, 255, (char)(255 * opacity));
-		canvas.SetPosition(Vector2{ startPos.X + (int)(boxSize.X / 2) - (width/2), startPos.Y - 20 });
-		canvas.DrawString(msg, 1, 1, true, false);
-	}
-
-	string msg = fmt::format("Horizontal distance traveled: {0:.1f}", attempt.traveledY);
-	int width = (msg.length() * 6.6);
-
-	//draw angle label
-	if(attempt.traveledY < 225)
-		canvas.SetColor(50, 255, 50, (char)(255 * opacity));
-	else if(attempt.traveledY < 425)
-		canvas.SetColor(255, 255, 50, (char)(255 * opacity));
-	else
-		canvas.SetColor(255, 10, 10, (char)(255 * opacity));
-
-	canvas.SetPosition(Vector2{ startPos.X + boxSize.X - width, (int)(startPos.Y - 20) });
-	canvas.DrawString(msg, 1, 1, true, false);
-
-	int start = 10;
-	if (attempt.startedInAir)
-	{
-		msg = "Started before car touched the ground! Wait for car to settle on next attempt.";
-		canvas.SetColor(255, 10, 10, (char)(255 * opacity));
-		canvas.SetPosition(Vector2{ startPos.X + (boxSize.X / 2) - 265, (int)(startPos.Y + boxSize.Y + start) });
-		canvas.DrawString(msg, 1, 1, true, false);
-		start += 15;
-	}
-	if (attempt.startedNoBoost)
-	{
-		msg = "Was not pressing boost when time started! Press boost before you press throttle on next attempt.";
-		canvas.SetColor(255, 10, 10, (char)(255 * opacity));
-		canvas.SetPosition(Vector2{ startPos.X + (boxSize.X / 2) - 330, (int)(startPos.Y + boxSize.Y + start) });
-		canvas.DrawString(msg, 1, 1, true, false);
-	}
+    if (attempt.flipCanceled) {
+        int ticksForCancel = attempt.flipCancelTick - attempt.dodgedTick;
+        std::string msLabel = fmt::format("{}ms", static_cast<int>(ticksForCancel / 120.0f * 1000.0f));
+        Vector2 msLabelSize = canvas.GetStringSize(msLabel);
+        canvas.SetPosition(Vector2{ startPos.X + reqSize.X / 2 - msLabelSize.X / 2, startPos.Y + reqSize.Y + 8 + 15 });
+        canvas.DrawString(msLabel);
+    }
 }
 
-void SpeedFlipTrainer::PlayAttempt(Attempt* a, shared_ptr<GameWrapper> gameWrapper, ControllerInput* ci)
-{
-	if (a->inputs.size() <= 0)
-		return;
+void SpeedFlipTrainer::RenderAngleMeter(CanvasWrapper canvas, float screenWidth, float screenHeight) {
+    int totalMeterUnits = 180; // Represents -90 to +90 degrees
+    int centerAngle = 90;  // 0 degrees will be at mark 90
 
-	int currentPhysicsFrame = gameWrapper->GetEngine().GetPhysicsFrame();
-	int tick = currentPhysicsFrame - startingPhysicsFrame;
+    float opacity = 1.0f;
+    Vector2 reqSize = { static_cast<int>(screenWidth * 0.66f), static_cast<int>(screenHeight * 0.04f) };
+    Vector2 startPos = { static_cast<int>((screenWidth / 2) - (reqSize.X / 2)), static_cast<int>(screenHeight * 0.9f) };
 
-	a->Play(ci, tick);
+    CustomColor baseC(255, 255, 255, opacity);
+    LineStyle borderS(CustomColor(255, 255, 255, opacity), 2);
 
-	gameWrapper->OverrideParams(ci, sizeof(ControllerInput));
+    std::list<MeterRange> ranges;
+    std::list<MeterMarking> markings;
+
+    int greenRangeWidth = 8; // Degrees for green zone around optimal
+    int yellowRangeWidth = 15; // Degrees for yellow zone
+
+    // Left optimal angle markings/ranges
+    int lTargetMeter = *optimalLeftAngle + centerAngle;
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, lTargetMeter - greenRangeWidth });
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, lTargetMeter + greenRangeWidth });
+    ranges.push_back({ CustomColor(50,255,50,0.7f), lTargetMeter - greenRangeWidth, lTargetMeter + greenRangeWidth });
+    ranges.push_back({ CustomColor(255,255,50,0.7f), lTargetMeter - yellowRangeWidth, lTargetMeter - greenRangeWidth });
+    ranges.push_back({ CustomColor(255,255,50,0.7f), lTargetMeter + greenRangeWidth, lTargetMeter + yellowRangeWidth });
+
+    // Right optimal angle markings/ranges
+    int rTargetMeter = *optimalRightAngle + centerAngle;
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, rTargetMeter - greenRangeWidth });
+    markings.push_back({ CustomColor(200,200,200,opacity), 1, rTargetMeter + greenRangeWidth });
+    ranges.push_back({ CustomColor(50,255,50,0.7f), rTargetMeter - greenRangeWidth, rTargetMeter + greenRangeWidth });
+    ranges.push_back({ CustomColor(255,255,50,0.7f), rTargetMeter - yellowRangeWidth, rTargetMeter - greenRangeWidth });
+    ranges.push_back({ CustomColor(255,255,50,0.7f), rTargetMeter + greenRangeWidth, rTargetMeter + yellowRangeWidth });
+
+    // Add red ranges for areas outside yellow
+    ranges.push_back({ CustomColor(255,50,50,0.7f), 0, std::min(lTargetMeter - yellowRangeWidth, rTargetMeter - yellowRangeWidth) });
+    ranges.push_back({ CustomColor(255,50,50,0.7f), std::max(lTargetMeter + yellowRangeWidth, rTargetMeter + yellowRangeWidth), totalMeterUnits });
+    // Red zone between the two yellow zones if they don't meet
+    if (lTargetMeter + yellowRangeWidth < rTargetMeter - yellowRangeWidth) {
+        ranges.push_back({ CustomColor(255,50,50,0.7f), lTargetMeter + yellowRangeWidth, rTargetMeter - yellowRangeWidth });
+    }
+
+
+    if (attempt.dodged) {
+        int angleMeterValue = attempt.dodgeAngle + centerAngle;
+        angleMeterValue = std::max(0, std::min(totalMeterUnits, angleMeterValue));
+        markings.push_back({ CustomColor(0,0,0,0.8f), 2, angleMeterValue });
+    }
+
+    RenderMeter(canvas, startPos, reqSize, baseC, borderS, totalMeterUnits, ranges, markings, false);
+
+    std::string angleText = "Dodge Angle: " + (attempt.dodged ? std::to_string(attempt.dodgeAngle) : "N/A") + " DEG";
+    canvas.SetColor(255, 255, 255, static_cast<unsigned char>(255 * opacity));
+    canvas.SetPosition(Vector2{ startPos.X, startPos.Y - 20 });
+    canvas.DrawString(angleText);
+
+    if (attempt.hit && attempt.ticksToBall > 0) {
+        std::string timeToBallMsg = fmt::format("Time to Ball: {:.3f}s", attempt.timeToBall);
+        Vector2 ttbSize = canvas.GetStringSize(timeToBallMsg);
+        canvas.SetPosition(Vector2{ startPos.X + reqSize.X / 2 - ttbSize.X / 2, startPos.Y - 20 });
+        canvas.DrawString(timeToBallMsg);
+    }
+
+    // Display total distance traveled (more relevant than Y-only for 3D)
+    std::string distMsg = fmt::format("Path Length: {:.0f}uu", attempt.totalDistanceTraveled);
+    Vector2 distMsgSize = canvas.GetStringSize(distMsg);
+    CustomColor distColor = (attempt.totalDistanceTraveled < 2500) ? CustomColor(50, 255, 50, opacity) :
+        (attempt.totalDistanceTraveled < 3500) ? CustomColor(255, 255, 50, opacity) :
+        CustomColor(255, 50, 50, opacity);
+    canvas.SetColor(distColor.r, distColor.g, distColor.b, distColor.GetAlphaChar());
+    canvas.SetPosition(Vector2{ startPos.X + reqSize.X - distMsgSize.X - 5, startPos.Y - 20 });
+    canvas.DrawString(distMsg);
+
+
+    int warningYOffset = reqSize.Y + 5;
+    if (attempt.startedInAir) {
+        std::string airMsg = "WARNING: Started in air!";
+        canvas.SetColor(255, 10, 10, static_cast<unsigned char>(255 * opacity));
+        canvas.SetPosition(Vector2{ startPos.X, startPos.Y + warningYOffset });
+        canvas.DrawString(airMsg);
+        warningYOffset += 15;
+    }
+    if (attempt.startedNoBoost) {
+        std::string noBoostMsg = "WARNING: Started without boost!";
+        canvas.SetColor(255, 10, 10, static_cast<unsigned char>(255 * opacity));
+        canvas.SetPosition(Vector2{ startPos.X, startPos.Y + warningYOffset });
+        canvas.DrawString(noBoostMsg);
+    }
 }
 
-void SpeedFlipTrainer::PlayBot(shared_ptr<GameWrapper> gameWrapper, ControllerInput* ci)
-{
-	int currentPhysicsFrame = gameWrapper->GetEngine().GetPhysicsFrame();
-	int tick = currentPhysicsFrame - startingPhysicsFrame;
 
-	bot.Play(ci, tick);
+// --- Bot/Replay Playback ---
+void SpeedFlipTrainer::PlayAttempt(Attempt* att, ControllerInput* ci) {
+    if (!gameWrapper || att->inputs.empty() || startingPhysicsFrame < 0) return;
+    int tick = gameWrapper->GetEngine().GetPhysicsFrame() - startingPhysicsFrame;
+    att->Play(ci, tick);
+    gameWrapper->OverrideParams(ci, sizeof(ControllerInput));
+}
 
-	gameWrapper->OverrideParams(ci, sizeof(ControllerInput));
+void SpeedFlipTrainer::PlayBot(ControllerInput* ci) {
+    if (!gameWrapper || bot.inputs.empty() || startingPhysicsFrame < 0) return;
+    int tick = gameWrapper->GetEngine().GetPhysicsFrame() - startingPhysicsFrame;
+    bot.Play(ci, tick);
+    gameWrapper->OverrideParams(ci, sizeof(ControllerInput));
+}
+
+
+// Definition of RenderMeter (could be in RenderMeter.cpp if it gets complex)
+// For now, keeping it here for self-containment of this file's fixes.
+Vector2 RenderMeter(CanvasWrapper canvas, Vector2 startPos, Vector2 reqBoxSize, CustomColor baseColor,
+    LineStyle borderStyle, int totalUnits, const std::list<MeterRange>& ranges,
+    const std::list<MeterMarking>& markings, bool vertical, float currentValue) {
+
+    // Calculate actual box size based on totalUnits and requested size (aspect ratio might change)
+    Vector2 actualBoxSize = reqBoxSize;
+    float unitPixelSize;
+
+    if (vertical) {
+        unitPixelSize = (totalUnits > 0) ? actualBoxSize.Y / static_cast<float>(totalUnits) : 0;
+        // actualBoxSize.Y = unitPixelSize * totalUnits; // Optional: adjust box Y to perfectly fit units
+    }
+    else {
+        unitPixelSize = (totalUnits > 0) ? actualBoxSize.X / static_cast<float>(totalUnits) : 0;
+        // actualBoxSize.X = unitPixelSize * totalUnits; // Optional: adjust box X
+    }
+    if (unitPixelSize <= 0.001f && totalUnits > 0) return startPos + actualBoxSize; // Avoid division by zero or tiny units
+
+
+    // Draw background
+    canvas.SetColor(baseColor.r, baseColor.g, baseColor.b, baseColor.GetAlphaChar());
+    canvas.SetPosition(startPos);
+    canvas.FillBox(actualBoxSize);
+
+    // Draw ranges
+    for (const auto& range : ranges) {
+        canvas.SetColor(range.color.r, range.color.g, range.color.b, range.color.GetAlphaChar());
+        Vector2 rangePos = startPos;
+        Vector2 rangeSize = actualBoxSize;
+        int rLow = std::max(0, std::min(totalUnits, range.low));
+        int rHigh = std::max(0, std::min(totalUnits, range.high));
+        if (rLow >= rHigh) continue;
+
+
+        if (vertical) {
+            rangePos.Y += (totalUnits - rHigh) * unitPixelSize; // Ranges drawn from top (high value) down
+            rangeSize.Y = (rHigh - rLow) * unitPixelSize;
+        }
+        else {
+            rangePos.X += rLow * unitPixelSize;
+            rangeSize.X = (rHigh - rLow) * unitPixelSize;
+        }
+        canvas.SetPosition(rangePos);
+        canvas.FillBox(rangeSize);
+    }
+
+    // Draw markings
+    for (const auto& mark : markings) {
+        canvas.SetColor(mark.lineStyle.color.r, mark.lineStyle.color.g, mark.lineStyle.color.b, mark.lineStyle.color.GetAlphaChar());
+        int mVal = std::max(0, std::min(totalUnits, mark.value));
+        Vector2 markStart, markEnd;
+
+        if (vertical) {
+            float yPos = startPos.Y + (totalUnits - mVal) * unitPixelSize;
+            markStart = { startPos.X, yPos };
+            markEnd = { startPos.X + actualBoxSize.X, yPos };
+        }
+        else {
+            float xPos = startPos.X + mVal * unitPixelSize;
+            markStart = { xPos, startPos.Y };
+            markEnd = { xPos, startPos.Y + actualBoxSize.Y };
+        }
+        canvas.DrawLine(markStart, markEnd, mark.lineStyle.width);
+    }
+
+    // Draw current value if provided and not covered by markings
+    if (currentValue >= 0) {
+        // Similar logic to markings for drawing a line for currentValue
+        // (This part was not in the original call, so it's an optional extension)
+    }
+
+
+    // Draw border
+    canvas.SetColor(borderStyle.color.r, borderStyle.color.g, borderStyle.color.b, borderStyle.color.GetAlphaChar());
+    canvas.SetPosition(startPos);
+    canvas.DrawBox(actualBoxSize, borderStyle.width); // DrawBox usually takes size and thickness
+
+    return startPos + actualBoxSize; // Return bottom-right corner or similar
 }

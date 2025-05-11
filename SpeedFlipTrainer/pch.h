@@ -8,6 +8,7 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <filesystem> // Added for std::filesystem
 
 #include "imgui/imgui.h"
 
@@ -19,5 +20,18 @@ extern std::shared_ptr<CVarManagerWrapper> _globalCvarManager;
 template<typename S, typename... Args>
 void LOG(const S& format_str, Args&&... args)
 {
-	_globalCvarManager->log(fmt::format(format_str, args...));
+	if (_globalCvarManager) { // Added null check for safety
+		_globalCvarManager->log(fmt::format(format_str, args...));
+	}
 }
+
+// Forward declarations if needed by other headers included transitively by pch.h
+// struct Vector; // Example if Vector is used by a header included here before its full definition
+// struct Rotator;
+// struct Matrix;
+// struct Vector4;
+// struct Color;
+// class CanvasWrapper;
+// class CameraWrapper;
+
+//PCH_H #endif 

@@ -3,34 +3,54 @@
 #include "bakkesmod/plugin/bakkesmodplugin.h"
 #include "bakkesmod/plugin/pluginwindow.h"
 #include "bakkesmod/plugin/PluginSettingsWindow.h"
-#include "bakkesmod/wrappers/wrapperstructs.h" // Pour Vector, Rotator, CameraWrapper etc.
+#include "bakkesmod/wrappers/wrapperstructs.h" // For Vector, Rotator, CameraWrapper, LinearColor etc.
+#include "bakkesmod/wrappers/GuiManagerWrapper.h" // For ImGui context
+#include "bakkesmod/wrappers/GameObject/CarWrapper.h"
+#include "bakkesmod/wrappers/GameObject/BallWrapper.h"
+#include "bakkesmod/wrappers/GameEvent/ServerWrapper.h"
+#include "bakkesmod/wrappers/GameEvent/GameEventWrapper.h"
+#include "bakkesmod/wrappers/training/TrainingEditorWrapper.h"
+
+
 #include "ImGuiFileDialog.h"
-#include "BotAttempt.h"
-#include "Attempt.h"
+#include "BotAttempt.h" // Assuming this includes its own necessary headers like <vector>
+#include "Attempt.h"    // Assuming this includes its own necessary headers
 
 #include "version.h"
 constexpr auto plugin_version = stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH) "." stringify(VERSION_BUILD);
 
-#include <memory>       // Pour std::shared_ptr
-#include <string>       // Pour std::string
-#include <vector>       // Pour std::vector (si nécessaire pour d'autres parties)
-#include <list>         // Pour std::list (utilisé dans RenderMeter.h, peut-être ici aussi)
-#include <filesystem>   // Pour std::filesystem
+#include <memory>       // For std::shared_ptr
+#include <string>       // For std::string
+#include <vector>       // For std::vector
+#include <list>         // For std::list
+#include <filesystem>   // For std::filesystem
+#include <cmath>        // For M_PI, tanf, cosf, sinf, sqrtf, atan2f, abs
+#include <algorithm>    // For std::min/max if needed
 
-// --- Structures nécessaires AVANT leur utilisation ---
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
-// Définition pour Vector4, nécessaire pour Matrix
-// Assurez-vous que 'Vector' est défini (via wrapperstructs.h)
+// --- Consolidated Structure Definitions ---
+
+// Definition for Vector4, necessary for Matrix
+// Ensure 'Vector' is defined (via wrapperstructs.h)
 struct Vector4 {
     float X, Y, Z, W;
 
     Vector4() : X(0), Y(0), Z(0), W(1.0f) {}
     Vector4(float x, float y, float z, float w) : X(x), Y(y), Z(z), W(w) {}
-    Vector4(const Vector& v) : X(v.X), Y(v.Y), Z(v.Z), W(1.0f) {}
+    Vector4(const Vector& v, float w = 1.0f) : X(v.X), Y(v.Y), Z(v.Z), W(w) {} // Added w parameter
 };
 
 struct Matrix {
     float M[4][4];
+
+    Matrix() { // Initialize to identity or zero matrix if preferred
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+                M[i][j] = (i == j) ? 1.0f : 0.0f;
+    }
 
     // Opérateur permettant de multiplier une matrice par un Vector4
     Vector4 operator*(const Vector4& vec) const {
@@ -41,16 +61,43 @@ struct Matrix {
         result.W = M[3][0] * vec.X + M[3][1] * vec.Y + M[3][2] * vec.Z + M[3][3] * vec.W;
         return result;
     }
+    // Matrix multiplication
+    Matrix operator*(const Matrix& other) const {
+        Matrix result;
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                result.M[i][j] = 0;
+                for (int k = 0; k < 4; ++k) {
+                    result.M[i][j] += M[i][k] * other.M[k][j];
+                }
+            }
+        }
+        return result;
+    }
 };
 
-// Structure pour les couleurs utilisée par DrawArrow et RenderCarAxes
-struct Color {
-    unsigned char red, green, blue;
-    float opacity;
+// Structure for custom colors (if LinearColor is not sufficient for all cases)
+// Note: CanvasWrapper typically uses LinearColor or char r,g,b,a (0-255)
+struct CustomColor {
+    unsigned char r, g, b;
+    float a; // Opacity 0.0f to 1.0f
+
+    CustomColor(unsigned char red = 0, unsigned char green = 0, unsigned char blue = 0, float alpha = 1.0f)
+        : r(red), g(green), b(blue), a(alpha) {
+    }
+
+    // Conversion to LinearColor for BakkesMod drawing functions
+    LinearColor ToLinearColor() const {
+        return LinearColor{ static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f, a };
+    }
+    // For CanvasWrapper::SetColor(char, char, char, char)
+    unsigned char GetAlphaChar() const {
+        return static_cast<unsigned char>(a * 255.0f);
+    }
 };
+
 
 // --- Enumérations ---
-
 enum class SpeedFlipTrainerMode
 {
     Replay,
@@ -59,55 +106,45 @@ enum class SpeedFlipTrainerMode
 };
 
 // --- Définition principale de la classe ---
-
 class SpeedFlipTrainer : public BakkesMod::Plugin::BakkesModPlugin,
     public BakkesMod::Plugin::PluginSettingsWindow,
     public BakkesMod::Plugin::PluginWindow
 {
 public:
-    // Structure pour stocker les vecteurs d'orientation (déjà dans votre code original)
     struct Orientation {
         Vector forward;
         Vector right;
         Vector up;
     };
 
-    // CVars (initialisées directement comme dans votre code original)
-    std::shared_ptr<bool> showCarAxes = std::make_shared<bool>(true);
-    std::shared_ptr<float> axisLength = std::make_shared<float>(150.0f);
-    std::shared_ptr<bool> enabled = std::make_shared<bool>(true);
-    std::shared_ptr<bool> showAngleMeter = std::make_shared<bool>(true);
-    std::shared_ptr<bool> showPositionMeter = std::make_shared<bool>(true);
-    std::shared_ptr<bool> showFlipMeter = std::make_shared<bool>(true);
-    std::shared_ptr<bool> showJumpMeter = std::make_shared<bool>(true);
-    std::shared_ptr<bool> changeSpeed = std::make_shared<bool>(false);
-    std::shared_ptr<float> speed = std::make_shared<float>(1.0f);
-    std::shared_ptr<bool> rememberSpeed = std::make_shared<bool>(true);
-    std::shared_ptr<int> numHitsChangedSpeed = std::make_shared<int>(3);
-    std::shared_ptr<float> speedIncrement = std::make_shared<float>(0.05f); // Noté 0.05 dans votre liste d'erreur, original 0.1
-    std::shared_ptr<int> optimalLeftAngle = std::make_shared<int>(-30);
-    std::shared_ptr<int> optimalRightAngle = std::make_shared<int>(30);
-    std::shared_ptr<int> flipCancelThreshold = std::make_shared<int>(13);
-    std::shared_ptr<int> jumpLow = std::make_shared<int>(40);
-    std::shared_ptr<int> jumpHigh = std::make_shared<int>(90);
-    std::shared_ptr<bool> saveToFile = std::make_shared<bool>(false);
+    std::shared_ptr<bool> showCarAxes;
+    std::shared_ptr<float> axisLength;
+    std::shared_ptr<bool> enabled;
+    std::shared_ptr<bool> showAngleMeter;
+    std::shared_ptr<bool> showPositionMeter;
+    std::shared_ptr<bool> showFlipMeter;
+    std::shared_ptr<bool> showJumpMeter;
+    std::shared_ptr<bool> changeSpeed;
+    std::shared_ptr<float> speed;
+    std::shared_ptr<bool> rememberSpeed;
+    std::shared_ptr<int> numHitsChangedSpeed;
+    std::shared_ptr<float> speedIncrement;
+    std::shared_ptr<int> optimalLeftAngle;
+    std::shared_ptr<int> optimalRightAngle;
+    std::shared_ptr<int> flipCancelThreshold;
+    std::shared_ptr<int> jumpLow;  // Make sure these are registered if used
+    std::shared_ptr<int> jumpHigh; // Make sure these are registered if used
+    std::shared_ptr<bool> saveToFile;
 
-    // Constructeur (peut être vide si l'initialisation ci-dessus suffit)
-    SpeedFlipTrainer() {
-        // dataDir, attemptFileDialog, botFileDialog peuvent nécessiter une initialisation ici ou dans onLoad()
-        // Par exemple, pour les FileDialogs si elles ont des constructeurs spécifiques
-        // menuTitle_ est déjà initialisé ci-dessous.
-    }
+    SpeedFlipTrainer(); // Constructor declaration
 
-    // Fonctions publiques
     void RenderCarAxes(CanvasWrapper canvas);
-    Orientation RotatorToMatrix(const Rotator& rotation);
+    Orientation RotatorToOrientation(const Rotator& rotation); // Renamed for clarity
     Vector2 WorldToScreen(CanvasWrapper canvas, Vector location);
     bool IsPointOnScreen(const Vector2& point, float screenWidth, float screenHeight);
-    void DrawArrow(CanvasWrapper& canvas, Vector2 start, Vector2 end, const Color& color);
-    Matrix GetViewProjectionMatrix(CameraWrapper camera); // Déclaration unique ici
+    void DrawArrow(CanvasWrapper& canvas, Vector2 start, Vector2 end, const CustomColor& color, int thickness = 2); // Using CustomColor
+    Matrix GetViewProjectionMatrix(CameraWrapper camera);
 
-    // Méthodes héritées et virtuelles
     virtual void onLoad() override;
     virtual void onUnload() override;
 
@@ -128,7 +165,7 @@ private:
     bool loaded = false;
     float initialTime = 0;
     int startingPhysicsFrame = -1;
-    int ticksBeforeTimeExpired = 0;
+    // int ticksBeforeTimeExpired = 0; // This seems unused, consider removing
 
     Attempt attempt;
     Attempt replayAttempt;
@@ -139,9 +176,9 @@ private:
 
     void Hook();
     bool IsMustysPack(TrainingEditorWrapper tw);
-    void Measure(CarWrapper car, std::shared_ptr<GameWrapper> gameWrapper);
-    void PlayBot(std::shared_ptr<GameWrapper> gameWrapper, ControllerInput* ci);
-    void PlayAttempt(Attempt* a, std::shared_ptr<GameWrapper> gameWrapper, ControllerInput* ci);
+    void Measure(CarWrapper car, PriWrapper pri); // Added PriWrapper for input
+    void PlayBot(ControllerInput* ci); // Removed GameWrapper, use member gameWrapper
+    void PlayAttempt(Attempt* a, ControllerInput* ci); // Removed GameWrapper
 
     void RenderMeters(CanvasWrapper canvas);
     void RenderAngleMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
@@ -149,9 +186,8 @@ private:
     void RenderFirstJumpMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
     void RenderPositionMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
 
-    // Membres pour PluginWindow
     bool isWindowOpen_ = false;
-    bool isMinimized_ = false;
+    // bool isMinimized_ = false; // PluginWindow doesn't typically manage this state itself
     std::string menuTitle_ = "Speedflip Trainer";
 
     std::filesystem::path dataDir;
