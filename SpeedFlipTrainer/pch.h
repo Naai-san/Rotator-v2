@@ -30,8 +30,8 @@ void LOG(const S& format_str, Args&&... args)
 // struct Rotator;
 // struct Matrix;
 // struct Vector4;
-// struct Color;
+// struct CustomColor; // If CustomColor were moved here
 // class CanvasWrapper;
 // class CameraWrapper;
 
-//PCH_H #endif 
+//PCH_H #endif
