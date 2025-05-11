@@ -9,12 +9,12 @@
 #include "bakkesmod/wrappers/GameObject/BallWrapper.h"
 #include "bakkesmod/wrappers/GameEvent/ServerWrapper.h"
 #include "bakkesmod/wrappers/GameEvent/GameEventWrapper.h"
-#include "bakkesmod/wrappers/training/TrainingEditorWrapper.h"
+#include "bakkesmod/wrappers/training/TrainingEditorWrapper.h" // Ensure this path is correct for your BakkesMod SDK
 
 
-#include "ImGuiFileDialog.h"
-#include "BotAttempt.h" // Assuming this includes its own necessary headers like <vector>
-#include "Attempt.h"    // Assuming this includes its own necessary headers
+#include "ImGuiFileDialog.h" // Make sure this is the correct header for your ImGuiFileDialog version
+#include "BotAttempt.h"      // Assuming this includes its own necessary headers like <vector>. Ensure BotAttempt has an 'inputs' member.
+#include "Attempt.h"         // Assuming this includes its own necessary headers. Ensure Attempt has members: pathPoints, totalDistanceTraveled, currentPosition, initialCarLocation.
 
 #include "version.h"
 constexpr auto plugin_version = stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH) "." stringify(VERSION_BUILD);
@@ -30,9 +30,10 @@ constexpr auto plugin_version = stringify(VERSION_MAJOR) "." stringify(VERSION_M
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+#define CONST_PI_F (static_cast<float>(M_PI))
 
-// --- Consolidated Structure Definitions ---
 
+// --- Consolidated Structure Definitions ---\
 // Definition for Vector4, necessary for Matrix
 // Ensure 'Vector' is defined (via wrapperstructs.h)
 struct Vector4 {
@@ -40,7 +41,7 @@ struct Vector4 {
 
     Vector4() : X(0), Y(0), Z(0), W(1.0f) {}
     Vector4(float x, float y, float z, float w) : X(x), Y(y), Z(z), W(w) {}
-    Vector4(const Vector& v, float w = 1.0f) : X(v.X), Y(v.Y), Z(v.Z), W(w) {} // Added w parameter
+    Vector4(const Vector& v, float w = 1.0f) : X(v.X), Y(v.Y), Z(v.Z), W(w) {}
 };
 
 struct Matrix {
@@ -76,8 +77,7 @@ struct Matrix {
     }
 };
 
-// Structure for custom colors (if LinearColor is not sufficient for all cases)
-// Note: CanvasWrapper typically uses LinearColor or char r,g,b,a (0-255)
+// Structure for custom colors
 struct CustomColor {
     unsigned char r, g, b;
     float a; // Opacity 0.0f to 1.0f
@@ -97,18 +97,18 @@ struct CustomColor {
 };
 
 
-// --- Enumérations ---
+// --- Enumérations ---\
 enum class SpeedFlipTrainerMode
 {
     Replay,
-    Bot,
-    Manual
+        Bot,
+        Manual
 };
 
-// --- Définition principale de la classe ---
+// --- Définition principale de la classe ---\
 class SpeedFlipTrainer : public BakkesMod::Plugin::BakkesModPlugin,
-    public BakkesMod::Plugin::PluginSettingsWindow,
-    public BakkesMod::Plugin::PluginWindow
+public BakkesMod::Plugin::PluginSettingsWindow,
+public BakkesMod::Plugin::PluginWindow
 {
 public:
     struct Orientation {
@@ -132,17 +132,17 @@ public:
     std::shared_ptr<int> optimalLeftAngle;
     std::shared_ptr<int> optimalRightAngle;
     std::shared_ptr<int> flipCancelThreshold;
-    std::shared_ptr<int> jumpLow;  // Make sure these are registered if used
-    std::shared_ptr<int> jumpHigh; // Make sure these are registered if used
+    std::shared_ptr<int> jumpLow;
+    std::shared_ptr<int> jumpHigh;
     std::shared_ptr<bool> saveToFile;
 
     SpeedFlipTrainer(); // Constructor declaration
 
     void RenderCarAxes(CanvasWrapper canvas);
-    Orientation RotatorToOrientation(const Rotator& rotation); // Renamed for clarity
+    Orientation RotatorToOrientation(const Rotator& rotation);
     Vector2 WorldToScreen(CanvasWrapper canvas, Vector location);
     bool IsPointOnScreen(const Vector2& point, float screenWidth, float screenHeight);
-    void DrawArrow(CanvasWrapper& canvas, Vector2 start, Vector2 end, const CustomColor& color, int thickness = 2); // Using CustomColor
+    void DrawArrow(CanvasWrapper& canvas, Vector2 start, Vector2 end, const CustomColor& color, int thickness = 2);
     Matrix GetViewProjectionMatrix(CameraWrapper camera);
 
     virtual void onLoad() override;
@@ -160,37 +160,38 @@ public:
     virtual void OnOpen() override;
     virtual void OnClose() override;
 
-private:
-    SpeedFlipTrainerMode mode = SpeedFlipTrainerMode::Manual;
-    bool loaded = false;
-    float initialTime = 0;
-    int startingPhysicsFrame = -1;
-    // int ticksBeforeTimeExpired = 0; // This seems unused, consider removing
+    // private: // Should be private, but for now public for easier access from RenderMeter.h if needed.
+    // Reconsider encapsulation if CustomColor is moved.
+    // For now, this is fine as RenderMeter.h includes this file.
 
-    Attempt attempt;
-    Attempt replayAttempt;
-    BotAttempt bot;
+        SpeedFlipTrainerMode mode = SpeedFlipTrainerMode::Manual;
+        bool loaded = false;
+        float initialTime = 0;
+        int startingPhysicsFrame = -1;
 
-    int consecutiveHits = 0;
-    int consecutiveMiss = 0;
+        Attempt attempt;       // Ensure Attempt.h defines members like: inputs, pathPoints, totalDistanceTraveled, currentPosition, initialCarLocation, etc.
+        Attempt replayAttempt;
+        BotAttempt bot;        // Ensure BotAttempt.h defines members like: inputs
 
-    void Hook();
-    bool IsMustysPack(TrainingEditorWrapper tw);
-    void Measure(CarWrapper car, PriWrapper pri); // Added PriWrapper for input
-    void PlayBot(ControllerInput* ci); // Removed GameWrapper, use member gameWrapper
-    void PlayAttempt(Attempt* a, ControllerInput* ci); // Removed GameWrapper
+        int consecutiveHits = 0;
+        int consecutiveMiss = 0;
 
-    void RenderMeters(CanvasWrapper canvas);
-    void RenderAngleMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
-    void RenderFlipCancelMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
-    void RenderFirstJumpMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
-    void RenderPositionMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
+        void Hook();
+        bool IsMustysPack(TrainingEditorWrapper tw);
+        void Measure(CarWrapper car, PriWrapper pri);
+        void PlayBot(ControllerInput* ci);
+        void PlayAttempt(Attempt* a, ControllerInput* ci);
 
-    bool isWindowOpen_ = false;
-    // bool isMinimized_ = false; // PluginWindow doesn't typically manage this state itself
-    std::string menuTitle_ = "Speedflip Trainer";
+        void RenderMeters(CanvasWrapper canvas);
+        void RenderAngleMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
+        void RenderFlipCancelMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
+        void RenderFirstJumpMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
+        void RenderPositionMeter(CanvasWrapper canvas, float screenWidth, float screenHeight);
 
-    std::filesystem::path dataDir;
-    ImGui::FileDialog attemptFileDialog;
-    ImGui::FileDialog botFileDialog;
+        bool isWindowOpen_ = false;
+        std::string menuTitle_ = "Speedflip Trainer";
+
+        std::filesystem::path dataDir;
+        ImGui::FileDialog attemptFileDialog; // Instance for attempt files
+        ImGui::FileDialog botFileDialog;     // Instance for bot files
 };

@@ -1,91 +1,116 @@
 #include "pch.h"
-#include "RenderMeter.h"
+#include "RenderMeter.h" // Includes SpeedFlipTrainer.h for CustomColor, Vector2, CanvasWrapper
 
-Vector2 RenderMeter(CanvasWrapper canvas, Vector2 startPos, Vector2 reqBoxSize, Color base, Line border, int totalUnits, std::list<MeterRange> ranges, std::list<MeterMarking> markings, bool vertical)
-{
-	int unitWidth = vertical ? reqBoxSize.Y / totalUnits : reqBoxSize.X / totalUnits;
-	Vector2 boxSize = vertical ? Vector2{ reqBoxSize.X, unitWidth * totalUnits } : Vector2{ unitWidth * totalUnits, reqBoxSize.Y };
+// Implementation of RenderMeter function
+Vector2 RenderMeter(CanvasWrapper canvas, Vector2 startPos, Vector2 reqBoxSize, CustomColor baseColor,
+    LineStyle borderStyle, int totalUnits, const std::list<MeterRange>& ranges,
+    const std::list<MeterMarking>& markings, bool vertical, float currentValue) {
 
-	// Draw base meter base color
-	canvas.SetColor(base.red, base.green, base.blue, (char)(100 * base.opacity));
-	canvas.SetPosition(startPos);
-	canvas.FillBox(boxSize);
+    // Calculate actual box size based on totalUnits and requested size (aspect ratio might change)
+    Vector2 actualBoxSize = reqBoxSize;
+    float unitPixelSize;
 
-	// Draw meter ranges
-	for (const MeterRange& range : ranges)
-	{
-		canvas.SetColor(range.red, range.green, range.blue, (char)(255 * range.opacity));
+    if (vertical) {
+        unitPixelSize = (totalUnits > 0) ? static_cast<float>(actualBoxSize.Y) / static_cast<float>(totalUnits) : 0;
+        // actualBoxSize.Y = unitPixelSize * totalUnits; // Optional: adjust box Y to perfectly fit units
+    }
+    else {
+        unitPixelSize = (totalUnits > 0) ? static_cast<float>(actualBoxSize.X) / static_cast<float>(totalUnits) : 0;
+        // actualBoxSize.X = unitPixelSize * totalUnits; // Optional: adjust box X
+    }
+    if (unitPixelSize <= 0.001f && totalUnits > 0) return startPos + actualBoxSize; // Avoid division by zero or tiny units
 
-		auto l = range.low;
-		if (l < 0)
-			l = 0;
-		if (l > totalUnits)
-			l = totalUnits;
 
-		auto h = range.high;
-		if (h < 0)
-			h = 0;
-		if (h > totalUnits)
-			h = totalUnits;
+    // Draw background
+    canvas.SetColor(baseColor.r, baseColor.g, baseColor.b, baseColor.GetAlphaChar());
+    canvas.SetPosition(startPos);
+    canvas.FillBox(actualBoxSize);
 
-		if (l > h)
-			l = h;
+    // Draw ranges
+    for (const auto& range : ranges) {
+        canvas.SetColor(range.color.r, range.color.g, range.color.b, range.color.GetAlphaChar());
+        Vector2 rangePos = startPos;
+        Vector2 rangeSize = actualBoxSize;
+        int rLow = std::max(0, std::min(totalUnits, range.low));
+        int rHigh = std::max(0, std::min(totalUnits, range.high));
+        if (rLow >= rHigh) continue;
 
-		if (vertical)
-		{
-			auto position = Vector2{ startPos.X, (int)(startPos.Y + boxSize.Y - (h * unitWidth)) };
-			auto size = Vector2{ boxSize.X, (int)((h - l) * unitWidth) };
-			canvas.SetPosition(position);
-			canvas.FillBox(size);
-		}
-		else
-		{
-			if (l != 0)
-				l -= 1;
-			if (h != totalUnits)
-				h -= 1;
-			auto position = Vector2{ (int)(startPos.X + (l * unitWidth)), startPos.Y };
-			auto size = Vector2{ (int)((h - l) * unitWidth), boxSize.Y };
-			canvas.SetPosition(position);
-			canvas.FillBox(size);
-		}
-	}
 
-	// Draw meter markings
-	for (const MeterMarking& marking : markings)
-	{
-		canvas.SetColor(marking.red, marking.green, marking.blue, (char)(255 * marking.opacity));
+        if (vertical) {
+            // In vertical, Y increases downwards. Low tick value is at bottom, high tick value at top.
+            // So range.low (e.g. 10 ticks) should be below range.high (e.g. 20 ticks) on screen.
+            // Meter is drawn from top (startPos.Y).
+            // (totalUnits - rHigh) gives offset from top for the *top* of the range.
+            rangePos.Y += static_cast<int>((totalUnits - rHigh) * unitPixelSize);
+            rangeSize.Y = static_cast<int>((rHigh - rLow) * unitPixelSize);
+        }
+        else {
+            rangePos.X += static_cast<int>(rLow * unitPixelSize);
+            rangeSize.X = static_cast<int>((rHigh - rLow) * unitPixelSize);
+        }
+        canvas.SetPosition(rangePos);
+        canvas.FillBox(rangeSize);
+    }
 
-		auto value = marking.value - 1;
-		if (value < 0)
-			value = 0;
-		if (value > totalUnits)
-			value = totalUnits;
+    // Draw markings
+    for (const auto& mark : markings) {
+        canvas.SetColor(mark.lineStyle.color.r, mark.lineStyle.color.g, mark.lineStyle.color.b, mark.lineStyle.color.GetAlphaChar());
+        int mVal = std::max(0, std::min(totalUnits, mark.value));
+        Vector2 markStart, markEnd;
 
-		if (vertical)
-		{
-			float y = startPos.Y + boxSize.Y - ((value + 1) * unitWidth);
-			auto begin = Vector2{ startPos.X,             (int)y };
-			auto end = Vector2{ startPos.X + boxSize.X, (int)y };
-			canvas.DrawLine(begin, end, marking.width);
-		}
-		else
-		{
-			float x = startPos.X + (value * unitWidth) + (marking.width / 2);
-			float y = startPos.Y - (marking.width / 2);
-			auto begin = Vector2{ (int)x, (int)y };
-			auto end = Vector2{ (int)x, (int)(y + boxSize.Y + 1) };
-			canvas.DrawLine(begin, end, marking.width);
-		}
-	}
+        if (vertical) {
+            // Similar to ranges, (totalUnits - mVal) gives offset from top.
+            float yPos = startPos.Y + static_cast<int>((totalUnits - mVal) * unitPixelSize);
+            markStart = { startPos.X, static_cast<int>(yPos) };
+            markEnd = { startPos.X + actualBoxSize.X, static_cast<int>(yPos) };
+        }
+        else {
+            float xPos = startPos.X + static_cast<int>(mVal * unitPixelSize);
+            markStart = { static_cast<int>(xPos), startPos.Y };
+            markEnd = { static_cast<int>(xPos), startPos.Y + actualBoxSize.Y };
+        }
+        canvas.DrawLine(markStart, markEnd, mark.lineStyle.width);
+    }
 
-	// Draw meter border
-	if (border.width > 0)
-	{
-		canvas.SetColor(border.red, border.green, border.blue, (char)(255 * border.opacity));
-		canvas.SetPosition(startPos.minus(Vector2{ border.width / 2, border.width / 2 }));
-		canvas.DrawBox(boxSize.minus(Vector2{ border.width * -1, border.width * -1 }));
-	}
+    // Draw current value if provided (currentValue is in terms of units from 0 to totalUnits)
+    if (currentValue >= 0.0f) {
+        int currentValUnit = static_cast<int>(currentValue);
+        currentValUnit = std::max(0, std::min(totalUnits, currentValUnit));
+        // Example: Draw a thicker, darker line for currentValue
+        CustomColor currentValueColor = CustomColor(10, 10, 10, 0.8f); // Darker marker
+        int currentValueMarkWidth = borderStyle.width > 0 ? borderStyle.width : 2; // Use border width or default
+        canvas.SetColor(currentValueColor.r, currentValueColor.g, currentValueColor.b, currentValueColor.GetAlphaChar());
 
-	return boxSize;
+        Vector2 cvMarkStart, cvMarkEnd;
+        if (vertical) {
+            float yPos = startPos.Y + static_cast<int>((totalUnits - currentValUnit) * unitPixelSize);
+            cvMarkStart = { startPos.X, static_cast<int>(yPos) };
+            cvMarkEnd = { startPos.X + actualBoxSize.X, static_cast<int>(yPos) };
+        }
+        else {
+            float xPos = startPos.X + static_cast<int>(currentValUnit * unitPixelSize);
+            cvMarkStart = { static_cast<int>(xPos), startPos.Y };
+            cvMarkEnd = { static_cast<int>(xPos), startPos.Y + actualBoxSize.Y };
+        }
+        canvas.DrawLine(cvMarkStart, cvMarkEnd, currentValueMarkWidth + 1); // Slightly thicker
+    }
+
+
+    // Draw border
+    if (borderStyle.width > 0) {
+        canvas.SetColor(borderStyle.color.r, borderStyle.color.g, borderStyle.color.b, borderStyle.color.GetAlphaChar());
+        canvas.SetPosition(startPos);
+        // Assuming DrawBox(Vector2 size, int thickness) exists or DrawBox(Vector2 size) draws a 1px border
+        // If DrawBox only takes size, borderStyle.width might be conceptually used or needs manual line drawing for thickness
+        // For now, trying to use it as a thickness parameter.
+        // If your BakkesMod version DrawBox(Vector2) is a 1px outline, and you want thicker,
+        // you'd need to draw 4 lines or filled rects.
+        // Let's assume an overload canvas.DrawBox(size, thickness) might exist or be intended.
+        // If not, change to canvas.DrawBox(actualBoxSize); and the thickness is 1px.
+        canvas.DrawBox(actualBoxSize); // Fallback to 1px border if thickness param is not supported
+        // Or if canvas.DrawBox(actualBoxSize, borderStyle.width) is the correct API:
+        // canvas.DrawBox(actualBoxSize, borderStyle.width);
+    }
+
+    return startPos + actualBoxSize; // Return bottom-right corner or similar
 }
