@@ -26,7 +26,7 @@ void SpeedFlipTrainer::RenderSettings() {
 	}
 
 	if (*showCarAxes) {
-		ImGui::SliderFloat("Axes Length", &axisLength, 50.0f, 300.0f, "%.0f");
+		ImGui::SliderFloat("Axes Length", axisLength.get(), 50.0f, 300.0f, "%.0f");
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("Length of the orientation axes");
 		}
